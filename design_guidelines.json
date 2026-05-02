@@ -1,0 +1,182 @@
+{
+  "project_name": "NURTIX",
+  "platform": "Expo React Native Mobile App",
+  "theme_and_archetype": {
+    "theme": "Light",
+    "archetype": "1 (Organic & Earthy) with a Quick-Commerce Twist",
+    "reasoning": "Healthcare requires warmth, trust, and calm (Earthy/Organic). However, 'Quick Commerce' requires a perception of extreme speed. The UI will use a grounded base (warm sand, bone white) with a highly kinetic, unnatural accent (Electric Coral) to draw attention to ETA and booking actions. This tension (calm base vs. kinetic accent) fulfills the E1 anti-pattern."
+  },
+  "brand_identity": {
+    "vibe": "Trustworthy, instantaneous, modern, and tactile.",
+    "emotion": "Relief and Speed. The user should feel the anxiety drop the moment they open the app, knowing help is minutes away."
+  },
+  "color_palette": {
+    "backgrounds": {
+      "primary": "#F8F7F4",
+      "card": "#FFFFFF",
+      "overlay": "rgba(18, 53, 36, 0.4)"
+    },
+    "text": {
+      "primary": "#1A1A1A",
+      "secondary": "#5C6159",
+      "disabled": "#A3A7A0"
+    },
+    "brand": {
+      "primary": "#123524",
+      "primary_description": "Deep Forest Green. Used for navigation, trusting elements, doctor names.",
+      "accent": "#FF4F40",
+      "accent_description": "Electric Coral (The Twist). Used sparingly for ETAs, live tracking paths, and the final 'Request Visit' CTA.",
+      "surface": "#EAE7E0"
+    },
+    "status": {
+      "success": "#2D7A5C",
+      "warning": "#F2A900",
+      "error": "#D32F2F"
+    }
+  },
+  "typography": {
+    "strategy": "The Soft Utility pairing. A modern humanist sans-serif for headings that feels friendly yet precise, and a highly legible geometric sans for the body.",
+    "fonts": {
+      "headings": "Outfit",
+      "body": "Manrope",
+      "monospace": "JetBrains Mono"
+    },
+    "scale": {
+      "h1": "text-4xl (32px), tracking-tighter, font-bold",
+      "h2": "text-3xl (28px), tracking-tight, font-semibold",
+      "h3": "text-2xl (24px), tracking-tight, font-medium",
+      "body": "text-base (16px), leading-relaxed",
+      "label": "text-xs (12px), uppercase, tracking-[0.2em]"
+    },
+    "rules": [
+      "No generic Inter or Roboto for headings.",
+      "Labels must be uppercase and widely spaced.",
+      "Headlines must use tight letter spacing."
+    ]
+  },
+  "spacing_and_layout": {
+    "system": "Tailwind RN standard via NativeWind or StyleSheet metrics.",
+    "screen_padding": "px-6 py-8 (24px horizontal, 32px vertical)",
+    "gap_system": {
+      "tight": "gap-2 (8px)",
+      "base": "gap-4 (16px)",
+      "loose": "gap-6 (24px)",
+      "massive": "gap-12 (48px)"
+    },
+    "border_radius": {
+      "card": "rounded-3xl (24px)",
+      "button": "rounded-full (9999px)",
+      "input": "rounded-2xl (16px)"
+    },
+    "rules": [
+      "Generous spacing: Let elements breathe. If standard is p-4, use p-6.",
+      "Avoid 100% width buttons in cards unless necessary. Use asymmetrical padding.",
+      "Containers with borders must have internal padding (p-6) to prevent text collision."
+    ]
+  },
+  "component_rules": {
+    "buttons": {
+      "primary": "bg-[#FF4F40] text-white rounded-full. Sharp, high contrast.",
+      "secondary": "bg-[#EAE7E0] text-[#123524] rounded-full. Low contrast, earthy.",
+      "states": "Must have explicit styling for active/pressed states (opacity 0.8 or scale down 0.98)."
+    },
+    "cards": {
+      "style": "Neumorphism (Tactile) variant. bg-[#FFFFFF], shadow-sm, border border-black/5. Crisp inner contrasts.",
+      "padding": "p-6"
+    },
+    "inputs": {
+      "style": "bg-[#F8F7F4] border border-[#EAE7E0] rounded-2xl p-4. Focus state must have high contrast border (#123524)."
+    },
+    "navigation": {
+      "style": "Bottom tab bar must float above content. rounded-full, glassmorphism if supported (blur), otherwise solid white with shadow."
+    }
+  },
+  "screens": {
+    "RoleSelector": {
+      "layout": "Massive typography. Split screen or bento layout for Patient vs Doctor. Use the onboarding_bg image for patient side.",
+      "focus": "Establish trust and clarify intent instantly."
+    },
+    "PatientDashboard": {
+      "layout": "Bento Grid protocol (Tetris mode adapted for mobile).",
+      "elements": [
+        "Hero: 'One-tap booking' CTA. Dominant visual.",
+        "Quick Action: AI Symptom Checker access.",
+        "List: Recent visits or active status."
+      ],
+      "vibe": "Calm, minimal friction. The CTA should pop with Electric Coral."
+    },
+    "DoctorPortal": {
+      "layout": "Control Room Grid (Dense, Data Correlation).",
+      "elements": [
+        "Status Toggle: Online/Offline (Prominent).",
+        "Map/List Feed: Nearby job requests.",
+        "Income/Stats: Glanceable summaries."
+      ],
+      "vibe": "Tactical, functional, high-visibility."
+    },
+    "LiveTrackingMap": {
+      "layout": "Full screen map view with floating bottom sheet.",
+      "elements": [
+        "Map: Use mock_map_bg.",
+        "Floating Sheet: ETA, Doctor Profile summary, Contact buttons."
+      ],
+      "vibe": "Immersive, reassuring."
+    },
+    "DoctorProfile": {
+      "layout": "Editorial layout. Large avatar, clear credentials.",
+      "elements": [
+        "Avatar: Large, overlapping the header.",
+        "Bio & Credentials: Generous line height.",
+        "Reviews: Horizontal scroll cards."
+      ],
+      "vibe": "Humanizing, authoritative."
+    },
+    "AISymptomChecker": {
+      "layout": "Chat interface. Differentiate user/AI bubbles with shape, not just color.",
+      "vibe": "Empathetic, non-clinical."
+    }
+  },
+  "motion_and_interactions": {
+    "strategy": "Micro-interactions for delight. Reanimated/Moti for fluid layout transitions.",
+    "rules": [
+      "Staggered entrance animations for list items.",
+      "Scale down on button press.",
+      "Smooth bottom sheet expansions."
+    ]
+  },
+  "testing_attributes": {
+    "rule": "All interactive and key informational elements MUST include a data-testid attribute.",
+    "convention": "kebab-case, role-based",
+    "examples": ["patient-booking-button", "doctor-accept-job-button", "role-selector-patient"]
+  },
+  "media_assets": {
+    "onboarding_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/f08a18ff-24d5-457c-8a3e-02c34daf0994/images/292fcae8a974008c8d2e57ff724f345c23a25fcb1736196eeaa311ce6fb384e1.png",
+      "description": "Minimalist 3D medical cross integrated with a fast moving trail, soft organic sage green and terracotta colors.",
+      "usage": "Role selector or main patient dashboard background."
+    },
+    "mock_map_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/f08a18ff-24d5-457c-8a3e-02c34daf0994/images/1050a85ecab9bf64a1b82e04b9bbb1eca3ee6088d2696491af833faae2b97f61.png",
+      "description": "High-end abstract top-down map view of a city neighborhood in clay render style.",
+      "usage": "Live ETA tracking screen background (mock map)."
+    },
+    "doctor_portraits": [
+      {
+        "url": "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwyfHxmcmllbmRseSUyMGRvY3RvciUyMHBvcnRyYWl0JTIwY2xlYW4lMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3Nzc0NjMxNXww&ixlib=rb-4.1.0&q=85",
+        "usage": "Doctor profile avatar, trust & safety screens."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1612531386530-97286d97c2d2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxmcmllbmRseSUyMGRvY3RvciUyMHBvcnRyYWl0JTIwY2xlYW4lMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3Nzc0NjMxNXww&ixlib=rb-4.1.0&q=85",
+        "usage": "Doctor list view thumbnail."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette and typography rules specified.",
+    "Use standard React Native components (View, Text, TouchableOpacity, ScrollView, FlatList).",
+    "For icons, use @expo/vector-icons (Lucide or Phosphor preferred).",
+    "Do NOT use web-specific HTML tags or Shadcn UI components. Adapt the styling paradigms to standard React Native or NativeWind.",
+    "Implement the 'data-testid' attributes extensively.",
+    "Use the provided image URLs to prevent placeholders."
+  ]
+}
