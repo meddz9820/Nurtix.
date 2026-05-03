@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 2 (earnings/withdrawals, e-prescriptions, e-invoices) fully tested. Backend: 12/12 pytest cases pass. Frontend: doctor 4-tab layout, earnings dashboard + withdraw modal, prescription editor/view, invoice view, and tracking-completed actions all render and integrate correctly with the backend.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": ["RN Web deprecation warnings: 'shadow*' style props and props.pointerEvents (non-blocking, should migrate to boxShadow/style.pointerEvents)"]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2_features.py",
+    "/app/test_reports/pytest/iteration2_results.xml"
+  ],
+  "action_items": [
+    "(Low priority) Migrate deprecated shadow* style props to boxShadow and props.pointerEvents to style.pointerEvents to silence RN Web warnings.",
+    "(Optional) The /doctor/prescription/[visitId] screen does not pre-populate existing prescription data when reopened to 'Edit' — if edit-in-place is desired, the form should fetch and hydrate from GET /api/visits/{id}/prescription. Not blocking; upsert works on save."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~630 lines — approaching the 700-line split threshold. Consider extracting prescriptions/invoices/earnings into separate routers in the next iteration.",
+    "Earnings 'this_week_*' uses completed[-7:] (last 7 visits), not calendar-week filtering. Field name is slightly misleading; consider renaming to 'recent_*' or filtering by timestamp >= now-7d.",
+    "ensure_invoice uses visit['fee'] with fallback 1499; safe, but if a doctor has a different fee the fallback could silently understate. Fine since accept_visit always sets fee.",
+    "Withdrawal status is hard-coded 'pending' with no admin endpoint to mark 'completed' — acknowledged as mocked per spec."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% of iteration-2 flows observed"},
+  "seed_data_creation": "Tests created several TEST_P_* patients and ~5 completed visits on doc-1 plus 3 pending withdrawals (₹100, ₹100, ₹500) on doc-1. doc-1 earnings state after run: available ₹5,671, pending_withdrawal ₹700, visits_completed 5, total_earned ₹7,495.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend public URL = EXPO_PUBLIC_BACKEND_URL (symptom-check-20...). For frontend login on web preview use data-testid selectors: role-selector-doctor, login-name-input, login-continue-button. page.keyboard.type works better than fill for RN TextInput. Doctor portal tabs: Feed/Active/Earnings/Profile. Earnings testIDs: available-balance-card, withdraw-button, withdraw-amount-input, confirm-withdraw. Active job testIDs: write-rx-{visitId}, advance-button-{visitId}. doc-1 has seeded earnings state from this run (available ~5671); rerunning withdrawal tests will continue to consume available balance.",
+  "rca_of_issue": "N/A — no bugs found."
+}
