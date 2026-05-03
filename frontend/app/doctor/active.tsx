@@ -131,7 +131,7 @@ export default function ActiveJobs() {
                 <Text style={styles.symptoms}>{v.symptoms}</Text>
 
                 {v.symptom_summary && (
-                  <View style={styles.aiPanel}>
+                  <View style={styles.aiPanel} testID={`ai-summary-${v.id}`}>
                     <View style={styles.aiHead}>
                       <Ionicons name="sparkles" size={12} color={COLORS.accent} />
                       <Text style={styles.aiHeadText}>AI TRIAGE REPORT</Text>
