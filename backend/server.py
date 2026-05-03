@@ -503,7 +503,7 @@ async def ensure_invoice(visit: dict) -> dict:
         service_charge=service,
         tax=tax,
         total=total,
-        status="paid",
+        status="pending",
         issued_at=now_iso(),
     )
     await db.invoices.insert_one(inv.dict())

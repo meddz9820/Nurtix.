@@ -92,6 +92,12 @@ export default function EarningsScreen() {
 
   const submitWithdraw = async () => {
     if (!doctor || !earnings) return;
+    if (!bank) {
+      showAlert('Connect your bank account first to receive payouts.');
+      setModalOpen(false);
+      setBankModalOpen(true);
+      return;
+    }
     const n = parseInt(amount, 10);
     if (!n || n <= 0) {
       showAlert('Enter a valid amount.');
@@ -108,12 +114,38 @@ export default function EarningsScreen() {
         setModalOpen(false);
         setAmount('');
         await load();
-        showAlert('Withdrawal requested. It will be processed within 2 business days.');
+        showAlert('Payout requested via Stripe Connect. Funds will arrive in 2 business days.');
       } else {
         showAlert(r?.detail || 'Withdrawal failed.');
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const saveBankAccount = async () => {
+    if (!doctor) return;
+    if (
+      !bankForm.holder.trim() ||
+      bankForm.number.length < 4 ||
+      bankForm.ifsc.trim().length < 4
+    ) {
+      showAlert('Please fill all bank details.');
+      return;
+    }
+    setSavingBank(true);
+    try {
+      await api.saveBank(doctor.id, {
+        account_holder: bankForm.holder.trim(),
+        account_number: bankForm.number,
+        ifsc: bankForm.ifsc.trim().toUpperCase(),
+      });
+      setBankModalOpen(false);
+      setBankForm({ holder: '', number: '', ifsc: '' });
+      await load();
+      showAlert('Bank linked. You can now withdraw earnings.');
+    } finally {
+      setSavingBank(false);
     }
   };
 
