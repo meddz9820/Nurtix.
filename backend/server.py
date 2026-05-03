@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,6 +11,10 @@ import uuid
 from datetime import datetime, timezone
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout,
+    CheckoutSessionRequest,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -20,6 +24,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -606,6 +611,182 @@ async def create_review(payload: ReviewCreate):
         {"id": payload.doctor_id}, {"$set": {"rating": avg, "reviews_count": len(revs)}}
     )
     return review
+
+
+# ===== Payments (Stripe Checkout) =====
+class PaymentTransaction(BaseModel):
+    id: str
+    visit_id: str
+    invoice_id: str
+    patient_id: str
+    amount: float
+    currency: str
+    session_id: str
+    payment_status: str
+    status: str
+    metadata: dict
+    created_at: str
+
+
+class CheckoutRequest(BaseModel):
+    visit_id: str
+    origin_url: str
+
+
+@api_router.post("/payments/checkout/session")
+async def create_checkout(payload: CheckoutRequest, request: Request):
+    if not STRIPE_API_KEY:
+        raise HTTPException(500, "Stripe not configured")
+    v = await db.visits.find_one({"id": payload.visit_id}, {"_id": 0})
+    if not v:
+        raise HTTPException(404, "Visit not found")
+    if v["status"] != "completed":
+        raise HTTPException(400, "Visit not completed yet")
+
+    inv = await ensure_invoice(v)
+    if isinstance(inv, dict):
+        inv.pop("_id", None)
+    if inv["status"] == "paid":
+        raise HTTPException(400, "Invoice already paid")
+
+    amount = float(inv["total"])
+    currency = "inr"
+    origin = payload.origin_url.rstrip("/")
+    success_url = f"{origin}/invoice/{v['id']}?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/invoice/{v['id']}"
+
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+
+    req = CheckoutSessionRequest(
+        amount=amount,
+        currency=currency,
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "visit_id": v["id"],
+            "invoice_id": inv["id"],
+            "patient_id": v["patient_id"],
+            "type": "visit_payment",
+        },
+    )
+    session = await stripe.create_checkout_session(req)
+
+    tx = PaymentTransaction(
+        id=str(uuid.uuid4()),
+        visit_id=v["id"],
+        invoice_id=inv["id"],
+        patient_id=v["patient_id"],
+        amount=amount,
+        currency=currency,
+        session_id=session.session_id,
+        payment_status="initiated",
+        status="open",
+        metadata={"type": "visit_payment"},
+        created_at=now_iso(),
+    )
+    await db.payment_transactions.insert_one(tx.dict())
+    return {"url": session.url, "session_id": session.session_id}
+
+
+@api_router.get("/payments/checkout/status/{session_id}")
+async def check_status(session_id: str, request: Request):
+    if not STRIPE_API_KEY:
+        raise HTTPException(500, "Stripe not configured")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+
+    st = await stripe.get_checkout_status(session_id)
+    tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+
+    if tx["payment_status"] != "paid" and st.payment_status == "paid":
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"payment_status": "paid", "status": st.status}},
+        )
+        await db.invoices.update_one(
+            {"id": tx["invoice_id"]}, {"$set": {"status": "paid"}}
+        )
+    elif st.status == "expired" and tx["payment_status"] == "initiated":
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"payment_status": "expired", "status": "expired"}},
+        )
+
+    return {
+        "status": st.status,
+        "payment_status": st.payment_status,
+        "amount_total": st.amount_total,
+        "currency": st.currency,
+    }
+
+
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: Request):
+    if not STRIPE_API_KEY:
+        return {"ok": False}
+    body = await request.body()
+    sig = request.headers.get("Stripe-Signature", "")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    try:
+        resp = await stripe.handle_webhook(body, sig)
+    except Exception as e:
+        logging.exception("Webhook error")
+        return {"ok": False, "error": str(e)}
+    if resp.payment_status == "paid" and resp.session_id:
+        tx = await db.payment_transactions.find_one(
+            {"session_id": resp.session_id}, {"_id": 0}
+        )
+        if tx and tx["payment_status"] != "paid":
+            await db.payment_transactions.update_one(
+                {"session_id": resp.session_id},
+                {"$set": {"payment_status": "paid", "status": "complete"}},
+            )
+            await db.invoices.update_one(
+                {"id": tx["invoice_id"]}, {"$set": {"status": "paid"}}
+            )
+    return {"ok": True}
+
+
+# ===== Doctor Stripe Connect (bank setup — payout MOCKED) =====
+class BankDetails(BaseModel):
+    account_holder: str
+    account_number: str
+    ifsc: str
+
+
+@api_router.post("/doctors/{doctor_id}/bank")
+async def save_bank(doctor_id: str, payload: BankDetails):
+    doc = await db.doctors.find_one({"id": doctor_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Doctor not found")
+    if len(payload.account_number) < 4:
+        raise HTTPException(400, "Invalid account number")
+    bank = {
+        "account_holder": payload.account_holder,
+        "account_number_masked": "•••• " + payload.account_number[-4:],
+        "ifsc": payload.ifsc.upper(),
+        "connect_status": "verified_simulated",
+        "linked_at": now_iso(),
+    }
+    await db.doctors.update_one({"id": doctor_id}, {"$set": {"bank": bank}})
+    return bank
+
+
+@api_router.get("/doctors/{doctor_id}/bank")
+async def get_bank(doctor_id: str):
+    doc = await db.doctors.find_one({"id": doctor_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Doctor not found")
+    return doc.get("bank")
+
+
 
 
 app.include_router(api_router)

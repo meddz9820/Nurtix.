@@ -35,14 +35,25 @@ interface Withdrawal {
   requested_at: string;
 }
 
+interface Bank {
+  account_holder: string;
+  account_number_masked: string;
+  ifsc: string;
+  connect_status: string;
+}
+
 export default function EarningsScreen() {
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [bank, setBank] = useState<Bank | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [bankModalOpen, setBankModalOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [bankForm, setBankForm] = useState({ holder: '', number: '', ifsc: '' });
+  const [savingBank, setSavingBank] = useState(false);
 
   const load = useCallback(async () => {
     const u = await storage.getUser();
@@ -52,12 +63,15 @@ export default function EarningsScreen() {
       all.find((d) => d.name.toLowerCase() === u.name.toLowerCase()) || all[0];
     setDoctor(me);
     if (me) {
-      const [e, w] = await Promise.all([
+      const [e, w, b] = await Promise.all([
         api.getEarnings(me.id),
         api.listWithdrawals(me.id),
+        api.getBank(me.id),
       ]);
       setEarnings(e);
       setWithdrawals(w);
+      setBank(b);
+      if (b) setBankForm({ holder: b.account_holder, number: '', ifsc: b.ifsc });
     }
     setLoading(false);
   }, []);
@@ -135,6 +149,42 @@ export default function EarningsScreen() {
             <Text style={styles.withdrawText}>Withdraw to bank</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Stripe Connect Bank card */}
+        <TouchableOpacity
+          testID="bank-connect-card"
+          style={styles.bankCard}
+          onPress={() => setBankModalOpen(true)}
+          activeOpacity={0.85}
+        >
+          <View
+            style={[
+              styles.bankIcon,
+              { backgroundColor: bank ? '#DFF3EA' : '#FFE6E2' },
+            ]}
+          >
+            <Ionicons
+              name={bank ? 'shield-checkmark' : 'card-outline'}
+              size={20}
+              color={bank ? COLORS.success : COLORS.accent}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bankTitle}>
+              {bank ? 'Bank account linked' : 'Connect your bank account'}
+            </Text>
+            <Text style={styles.bankSub}>
+              {bank
+                ? `${bank.account_holder} · ${bank.account_number_masked} · ${bank.ifsc}`
+                : 'Required to receive Stripe Connect payouts'}
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={COLORS.textSecondary}
+          />
+        </TouchableOpacity>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
@@ -287,6 +337,78 @@ export default function EarningsScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        visible={bankModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBankModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>
+              {bank ? 'Update bank account' : 'Connect bank account'}
+            </Text>
+            <Text style={styles.modalSub}>
+              Stripe Connect · your funds will be payed out here after each withdrawal request.
+            </Text>
+            <TextInput
+              testID="bank-holder-input"
+              value={bankForm.holder}
+              onChangeText={(t) => setBankForm({ ...bankForm, holder: t })}
+              placeholder="Account holder name"
+              placeholderTextColor={COLORS.textDisabled}
+              style={styles.bankInput}
+            />
+            <TextInput
+              testID="bank-account-input"
+              value={bankForm.number}
+              onChangeText={(t) =>
+                setBankForm({ ...bankForm, number: t.replace(/[^0-9]/g, '') })
+              }
+              placeholder={
+                bank
+                  ? `New account no. (currently ${bank.account_number_masked})`
+                  : 'Account number'
+              }
+              placeholderTextColor={COLORS.textDisabled}
+              keyboardType="number-pad"
+              style={styles.bankInput}
+            />
+            <TextInput
+              testID="bank-ifsc-input"
+              value={bankForm.ifsc}
+              onChangeText={(t) => setBankForm({ ...bankForm, ifsc: t.toUpperCase() })}
+              placeholder="IFSC code"
+              placeholderTextColor={COLORS.textDisabled}
+              autoCapitalize="characters"
+              style={styles.bankInput}
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                onPress={() => setBankModalOpen(false)}
+                style={[styles.modalBtn, styles.modalCancel]}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="save-bank-button"
+                disabled={savingBank}
+                onPress={saveBankAccount}
+                style={[styles.modalBtn, styles.modalConfirm, savingBank && { opacity: 0.6 }]}
+              >
+                {savingBank ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {bank ? 'Update' : 'Connect'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -418,4 +540,35 @@ const styles = StyleSheet.create({
   modalCancelText: { color: COLORS.primary, fontWeight: '700' },
   modalConfirm: { backgroundColor: COLORS.accent },
   modalConfirmText: { color: '#FFF', fontWeight: '700' },
+  bankCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFF',
+    padding: 16,
+    borderRadius: 22,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
+  },
+  bankIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bankTitle: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
+  bankSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  bankInput: {
+    backgroundColor: COLORS.bg,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
+    marginBottom: 10,
+  },
 });

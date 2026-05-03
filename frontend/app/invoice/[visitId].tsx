@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,27 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Platform,
+  Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { api, COLORS } from '../../src/lib/api';
 
 export default function InvoiceView() {
   const router = useRouter();
-  const { visitId } = useLocalSearchParams<{ visitId: string }>();
+  const { visitId, session_id } = useLocalSearchParams<{
+    visitId: string;
+    session_id?: string;
+  }>();
   const [inv, setInv] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [payStatus, setPayStatus] = useState<string>('');
 
   const load = useCallback(async () => {
     if (!visitId) return;
@@ -31,6 +41,77 @@ export default function InvoiceView() {
     }, [load]),
   );
 
+  // Poll payment status if returning from Stripe
+  useEffect(() => {
+    if (!session_id) return;
+    let attempts = 0;
+    const maxAttempts = 7;
+    const interval = 2000;
+    setPolling(true);
+    setPayStatus('Confirming payment...');
+    const poll = async () => {
+      try {
+        const s = await api.checkPaymentStatus(session_id as string);
+        if (s.payment_status === 'paid') {
+          setPayStatus('Payment successful!');
+          setPolling(false);
+          await load();
+          return;
+        }
+        if (s.status === 'expired') {
+          setPayStatus('Session expired.');
+          setPolling(false);
+          return;
+        }
+        attempts += 1;
+        if (attempts < maxAttempts) setTimeout(poll, interval);
+        else {
+          setPayStatus('Still processing. Pull to refresh.');
+          setPolling(false);
+        }
+      } catch {
+        setPayStatus('Could not confirm payment.');
+        setPolling(false);
+      }
+    };
+    poll();
+  }, [session_id, load]);
+
+  const showAlert = (m: string) => {
+    if (Platform.OS === 'web') window.alert(m);
+    else Alert.alert('NURTIX', m);
+  };
+
+  const pay = async () => {
+    if (!visitId) return;
+    setPaying(true);
+    try {
+      const origin =
+        Platform.OS === 'web' && typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.EXPO_PUBLIC_BACKEND_URL || '';
+      const r = await api.createCheckout(visitId, origin);
+      if (r?.url) {
+        if (Platform.OS === 'web') {
+          window.location.href = r.url;
+        } else {
+          await WebBrowser.openBrowserAsync(r.url);
+          // On native return, manually re-check status using session_id
+          const sess = r.session_id;
+          if (sess) {
+            router.replace(`/invoice/${visitId}?session_id=${sess}`);
+          }
+        }
+      } else {
+        showAlert(r?.detail || 'Unable to start checkout.');
+      }
+    } catch {
+      showAlert('Payment could not be started.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -38,6 +119,8 @@ export default function InvoiceView() {
       </View>
     );
   }
+
+  const paid = inv?.status === 'paid';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -61,71 +144,116 @@ export default function InvoiceView() {
             </Text>
           </View>
         ) : (
-          <View style={styles.card}>
-            <View style={styles.header}>
-              <View>
-                <Text style={styles.brand}>NURTIX</Text>
-                <Text style={styles.tag}>HOME HEALTHCARE</Text>
+          <>
+            {polling && (
+              <View style={styles.banner} testID="payment-banner">
+                <ActivityIndicator color={COLORS.accent} />
+                <Text style={styles.bannerText}>{payStatus}</Text>
               </View>
-              <View style={styles.paidPill}>
-                <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
-                <Text style={styles.paidText}>{inv.status.toUpperCase()}</Text>
-              </View>
-            </View>
-
-            <View style={styles.metaRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.metaKey}>INVOICE</Text>
-                <Text style={styles.metaVal}>#{inv.id.slice(0, 8).toUpperCase()}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.metaKey}>DATE</Text>
-                <Text style={styles.metaVal}>
-                  {new Date(inv.issued_at).toLocaleDateString()}
+            )}
+            {!polling && payStatus && (
+              <View style={[styles.banner, paid && { backgroundColor: '#DFF3EA' }]}>
+                <Ionicons
+                  name={paid ? 'checkmark-circle' : 'information-circle'}
+                  size={18}
+                  color={paid ? COLORS.success : COLORS.warning}
+                />
+                <Text style={[styles.bannerText, paid && { color: COLORS.success }]}>
+                  {payStatus}
                 </Text>
               </View>
+            )}
+
+            <View style={styles.card}>
+              <View style={styles.header}>
+                <View>
+                  <Text style={styles.brand}>NURTIX</Text>
+                  <Text style={styles.tag}>HOME HEALTHCARE</Text>
+                </View>
+                <View
+                  style={[
+                    styles.paidPill,
+                    !paid && { backgroundColor: '#FFF4D9' },
+                  ]}
+                >
+                  <Ionicons
+                    name={paid ? 'checkmark-circle' : 'time'}
+                    size={14}
+                    color={paid ? COLORS.success : COLORS.warning}
+                  />
+                  <Text style={[styles.paidText, !paid && { color: COLORS.warning }]}>
+                    {(inv.status || 'pending').toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.metaRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.metaKey}>INVOICE</Text>
+                  <Text style={styles.metaVal}>#{inv.id.slice(0, 8).toUpperCase()}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.metaKey}>DATE</Text>
+                  <Text style={styles.metaVal}>
+                    {new Date(inv.issued_at).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+              <View style={styles.row}>
+                <Text style={styles.k}>Billed to</Text>
+                <Text style={styles.v}>{inv.patient_name}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.k}>Doctor</Text>
+                <Text style={styles.v}>{inv.doctor_name}</Text>
+              </View>
+
+              <View style={styles.divider} />
+              <View style={styles.row}>
+                <Text style={styles.k}>Home consultation fee</Text>
+                <Text style={styles.v}>₹{inv.consultation_fee}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.k}>Service charge (5%)</Text>
+                <Text style={styles.v}>₹{inv.service_charge}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.k}>Tax (GST 18%)</Text>
+                <Text style={styles.v}>₹{inv.tax}</Text>
+              </View>
+
+              <View style={styles.divider} />
+              <View style={styles.totalRow}>
+                <Text style={styles.tKey}>TOTAL {paid ? 'PAID' : 'DUE'}</Text>
+                <Text style={styles.tVal}>₹{inv.total.toLocaleString()}</Text>
+              </View>
+
+              <View style={styles.footer}>
+                <Text style={styles.fText}>Thank you for choosing NURTIX.</Text>
+                <Text style={styles.fSub}>Questions? support@nurtix.com</Text>
+              </View>
             </View>
 
-            <View style={styles.divider} />
-
-            <View style={styles.row}>
-              <Text style={styles.key}>Billed to</Text>
-              <Text style={styles.val}>{inv.patient_name}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.key}>Doctor</Text>
-              <Text style={styles.val}>{inv.doctor_name}</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.row}>
-              <Text style={styles.key}>Home consultation fee</Text>
-              <Text style={styles.val}>₹{inv.consultation_fee}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.key}>Service charge (5%)</Text>
-              <Text style={styles.val}>₹{inv.service_charge}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.key}>Tax (GST 18%)</Text>
-              <Text style={styles.val}>₹{inv.tax}</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalKey}>TOTAL PAID</Text>
-              <Text style={styles.totalVal}>₹{inv.total.toLocaleString()}</Text>
-            </View>
-
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Thank you for choosing NURTIX.</Text>
-              <Text style={styles.footerSub}>
-                Questions? support@nurtix.com
-              </Text>
-            </View>
-          </View>
+            {!paid && (
+              <TouchableOpacity
+                testID="pay-now-button"
+                style={[styles.payBtn, paying && { opacity: 0.6 }]}
+                onPress={pay}
+                disabled={paying}
+              >
+                {paying ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="card" size={18} color="#FFF" />
+                    <Text style={styles.payText}>Pay ₹{inv.total.toLocaleString()} with Stripe</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -160,6 +288,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 30,
   },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF4D9',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 14,
+  },
+  bannerText: { flex: 1, color: COLORS.textPrimary, fontWeight: '600', fontSize: 13 },
   card: {
     backgroundColor: '#FFF',
     borderRadius: 24,
@@ -190,8 +328,8 @@ const styles = StyleSheet.create({
   metaVal: { fontSize: 14, color: COLORS.textPrimary, fontWeight: '700', marginTop: 4 },
   divider: { height: 1, backgroundColor: COLORS.surface, marginVertical: 14 },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  key: { color: COLORS.textSecondary, fontSize: 14 },
-  val: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '600' },
+  k: { color: COLORS.textSecondary, fontSize: 14 },
+  v: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '600' },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -201,9 +339,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginTop: 4,
   },
-  totalKey: { color: 'rgba(255,255,255,0.7)', fontSize: 11, letterSpacing: 2, fontWeight: '700' },
-  totalVal: { color: '#FFF', fontSize: 22, fontWeight: '800' },
+  tKey: { color: 'rgba(255,255,255,0.7)', fontSize: 11, letterSpacing: 2, fontWeight: '700' },
+  tVal: { color: '#FFF', fontSize: 22, fontWeight: '800' },
   footer: { alignItems: 'center', marginTop: 20 },
-  footerText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '600' },
-  footerSub: { fontSize: 11, color: COLORS.textDisabled, marginTop: 4 },
+  fText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '600' },
+  fSub: { fontSize: 11, color: COLORS.textDisabled, marginTop: 4 },
+  payBtn: {
+    marginTop: 16,
+    backgroundColor: COLORS.accent,
+    borderRadius: 999,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  payText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });

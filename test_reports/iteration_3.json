@@ -1,0 +1,86 @@
+{
+  "summary": "Iteration 3 (Stripe Checkout + Doctor Bank Connect) tested. Backend bank flow + webhook OK. TWO P0 BUGS BLOCK ITERATION 3: (1) Backend ensure_invoice() creates invoices with status='paid' instead of 'pending' — Pay button never appears and checkout/session returns 400 'Invoice already paid'; (2) Frontend earnings.tsx references saveBankAccount which is NOT defined — RED SCREEN ReferenceError crashes the entire Earnings screen, blocking bank-connect-card / withdraw-button / save-bank-button flows. 7/10 backend tests pass (2 failed due to bug #1, 1 skipped due to dependency). Frontend cannot be tested past initial render due to bug #2.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "ensure_invoice() in /app/backend/server.py L497-L508 (used by GET /api/visits/{id}/invoice and POST /api/payments/checkout/session)",
+        "issue": "Invoice is created with status='paid' on visit completion. This auto-marks every new invoice as paid, so (a) frontend never shows the 'Pay with Stripe' button (paid pill is shown) and (b) POST /api/payments/checkout/session returns 400 'Invoice already paid' for every brand-new completed visit. Should default to status='pending' (or 'unpaid'); only the Stripe success/webhook flow should set it to 'paid'.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/payments/checkout/session",
+        "issue": "Does not validate origin_url (any string accepted). Low risk but worth a basic http(s) check."
+      },
+      {
+        "endpoint": "POST /api/doctors/{id}/bank",
+        "issue": "Account number length only validated as >=4. Spec says 'invalid short account number returns 400' which works, but no IFSC format validation (any string accepted, just upper-cased)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "/app/frontend/app/doctor/earnings.tsx",
+        "issue": "RED SCREEN: 'ReferenceError: saveBankAccount is not defined' at line 397 (onPress={saveBankAccount}). The function is never declared in the file. As soon as a doctor lands on the Earnings tab, the entire screen crashes — bank-connect-card, withdraw-button, available-balance-card, save-bank-button all unreachable. Need to implement saveBankAccount that: validates fields, calls api.saveBank(doctor.id, {account_holder, account_number, ifsc}), closes modal, refreshes via load(), and shows alert.",
+        "testID": "save-bank-button (currently unreachable due to crash)",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "/app/frontend/app/doctor/earnings.tsx withdraw flow",
+        "issue": "Spec requires: 'Withdraw button on Earnings now requires bank linked — shows an alert if not linked and opens the bank modal.' Current implementation directly opens the withdraw amount modal without checking bank state (line 146: onPress={() => setModalOpen(true)}). Needs: if (!bank) { showAlert('Please link your bank account first'); setBankModalOpen(true); return; }",
+        "testID": "withdraw-button",
+        "priority": "HIGH"
+      },
+      {
+        "component": "earnings.tsx bank modal copy",
+        "issue": "Typo: 'your funds will be payed out' should be 'paid out' (line 353).",
+        "testID": "n/a",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Patient invoice payment via Stripe",
+        "issue": "Cannot reach the Pay button at all because backend auto-pays the invoice on visit completion (see backend bug #1). Even though pay-now-button + createCheckout API wiring look correct, the (paid===true) branch always renders, hiding the button. End-to-end Stripe redirect could not be exercised.",
+        "affected_testIDs": ["pay-now-button", "payment-banner"]
+      },
+      {
+        "flow": "Doctor bank connect + withdrawal",
+        "issue": "Entire Earnings screen crashes with red screen on mount due to undefined saveBankAccount, so no integration testing of POST /api/doctors/{id}/bank from the UI was possible. Backend endpoint itself works (verified via direct API tests).",
+        "affected_testIDs": ["bank-connect-card", "save-bank-button", "withdraw-button", "confirm-withdraw"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_payments_bank.py",
+    "/app/test_reports/pytest/iteration3_results.xml"
+  ],
+  "action_items": [
+    "FIX BACKEND: In /app/backend/server.py ensure_invoice(), change Invoice(...) initial status from 'paid' to 'pending'. Status should only flip to 'paid' inside /api/payments/checkout/status/{session_id} or the /api/webhook/stripe handler (both already handle this).",
+    "FIX FRONTEND: In /app/frontend/app/doctor/earnings.tsx, implement the missing saveBankAccount function. Suggested: const saveBankAccount = async () => { if (!doctor) return; if (!bankForm.holder.trim() || bankForm.number.length < 4 || !bankForm.ifsc) { showAlert('Please fill all bank fields'); return; } setSavingBank(true); try { const r = await api.saveBank(doctor.id, { account_holder: bankForm.holder, account_number: bankForm.number, ifsc: bankForm.ifsc }); if (r?.account_number_masked) { setBank(r); setBankModalOpen(false); setBankForm({ holder: r.account_holder, number: '', ifsc: r.ifsc }); showAlert('Bank account linked.'); } else { showAlert(r?.detail || 'Could not save bank.'); } } finally { setSavingBank(false); } };",
+    "FIX FRONTEND: Add bank-linked guard before opening withdraw modal — if (!bank) { showAlert('Link your bank account before withdrawing'); setBankModalOpen(true); return; }",
+    "OPTIONAL: Fix typo 'payed out' -> 'paid out' in bank modal subtitle.",
+    "AFTER FIXES: re-run /app/backend/tests/test_iteration3_payments_bank.py and replay the doctor earnings flow + patient pay flow."
+  ],
+  "critical_code_review_comments": [
+    "ensure_invoice hard-codes status='paid' on creation — incompatible with the new Stripe payment flow. This is the single root cause of all payment integration tests failing.",
+    "earnings.tsx bank modal references saveBankAccount but the function is missing entirely — likely lost during merge or never added. TypeScript strict mode is evidently not blocking the bundle since Expo/Metro strips types; a tsc check should be added to CI.",
+    "earnings.tsx withdraw-button does not enforce bank-linked precondition required by the iteration 3 spec.",
+    "PaymentTransaction model is fine but consider an index on session_id for faster status lookups.",
+    "/api/webhook/stripe: signature verification depends on emergentintegrations.handle_webhook; the endpoint silently returns ok:false on failure which is correct but logs are useful — already logged via logging.exception."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_payments_bank.py (created)",
+    "/app/test_reports/pytest/iteration3_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "70% (7/10, 1 skipped)", "frontend": "0% (red screen blocks all doctor flows; patient pay flow blocked by backend bug)"},
+  "seed_data_creation": "Created TEST_ prefixed patient users + visits via API (status accepted->completed) and saved a bank record on doc-2 + doc-3. None of these mutate seeded production data.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Re-run /app/backend/tests/test_iteration3_payments_bank.py — once ensure_invoice default flips to 'pending', test_invoice_created_pending_not_paid + test_create_checkout_session_returns_url + test_checkout_status_returns_fields should all pass and produce a real Stripe checkout URL (sk_test_emergent proxy). For frontend, after saveBankAccount is implemented and withdraw bank-guard added, log in as 'Dr. Sara Iyer' (or any seeded doctor), navigate to /doctor/earnings, verify (1) bank-connect-card is visible, (2) withdraw-button without bank shows alert + opens bank modal, (3) save-bank-button persists masked account, (4) on patient side after a completed visit /invoice/{id} shows pay-now-button and api.createCheckout returns a stripe URL.",
+  "rca_of_issue": "BUG 1 (auto-paid invoice): ensure_invoice() in server.py was likely copied from iteration 2 where invoices were assumed paid. Iteration 3 introduced Stripe but the initial status was not switched to 'pending', so the Stripe path is unreachable. Reproduction: POST /api/visits -> PATCH .../accept -> PATCH .../status with status='completed' -> GET /api/visits/{id}/invoice returns status='paid'. Mitigation: change Invoice(status='paid') to Invoice(status='pending') in ensure_invoice. BUG 2 (saveBankAccount undefined): Inside EarningsScreen the JSX calls onPress={saveBankAccount} but the function body was never authored. React renders fine until the component body throws when EvaluatesPropExpression resolves the undefined identifier (actually it crashes synchronously inside the render because saveBankAccount is referenced as an identifier in scope). Reproduction: open https://symptom-check-20.preview.emergentagent.com/doctor/earnings after seeding a doctor user — red screen 'saveBankAccount is not defined'. Mitigation: implement the function as outlined in action_items."
+}

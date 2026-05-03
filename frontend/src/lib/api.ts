@@ -187,6 +187,32 @@ export const api = {
     const r = await fetch(`${API}/doctors/${doctorId}/withdrawals`);
     return r.json();
   },
+  async createCheckout(visitId: string, originUrl: string) {
+    const r = await fetch(`${API}/payments/checkout/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visit_id: visitId, origin_url: originUrl }),
+    });
+    return r.json();
+  },
+  async checkPaymentStatus(sessionId: string) {
+    const r = await fetch(`${API}/payments/checkout/status/${sessionId}`);
+    return r.json();
+  },
+  async saveBank(doctorId: string, payload: any) {
+    const r = await fetch(`${API}/doctors/${doctorId}/bank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return r.json();
+  },
+  async getBank(doctorId: string) {
+    const r = await fetch(`${API}/doctors/${doctorId}/bank`);
+    const txt = await r.text();
+    if (!txt || txt === 'null') return null;
+    return JSON.parse(txt);
+  },
 };
 
 export const COLORS = {
