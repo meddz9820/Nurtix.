@@ -698,30 +698,45 @@ async def check_status(session_id: str, request: Request):
     webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
     stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
 
-    st = await stripe.get_checkout_status(session_id)
     tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
     if not tx:
         raise HTTPException(404, "Transaction not found")
 
-    if tx["payment_status"] != "paid" and st.payment_status == "paid":
+    try:
+        st = await stripe.get_checkout_status(session_id)
+        status_ = st.status
+        payment_status = st.payment_status
+        amount_total = st.amount_total
+        currency = st.currency
+    except Exception as e:
+        logging.warning(f"checkout status upstream error: {e}; falling back to local tx")
+        # Fallback to locally stored transaction state (webhook may have updated it)
+        return {
+            "status": tx.get("status", "open"),
+            "payment_status": tx.get("payment_status", "initiated"),
+            "amount_total": int(tx["amount"] * 100),
+            "currency": tx["currency"],
+        }
+
+    if tx["payment_status"] != "paid" and payment_status == "paid":
         await db.payment_transactions.update_one(
             {"session_id": session_id},
-            {"$set": {"payment_status": "paid", "status": st.status}},
+            {"$set": {"payment_status": "paid", "status": status_}},
         )
         await db.invoices.update_one(
             {"id": tx["invoice_id"]}, {"$set": {"status": "paid"}}
         )
-    elif st.status == "expired" and tx["payment_status"] == "initiated":
+    elif status_ == "expired" and tx["payment_status"] == "initiated":
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {"payment_status": "expired", "status": "expired"}},
         )
 
     return {
-        "status": st.status,
-        "payment_status": st.payment_status,
-        "amount_total": st.amount_total,
-        "currency": st.currency,
+        "status": status_,
+        "payment_status": payment_status,
+        "amount_total": amount_total,
+        "currency": currency,
     }
 
 
