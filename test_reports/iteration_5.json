@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 4 (AI-first end-to-end flow + PDF export) tested. Backend pytest: 8/8 PASS for all new endpoints (user_turns/ready_for_report on /symptom-check, POST/GET /symptom-check/{sid}/report, POST /visits with symptom_report_id copying summary+urgency, doctor feed exposing symptom_summary). Full pytest regression (iterations 2-4 combined) not rerun but individually healthy. Frontend: Found and FIXED a P0 bundler-breaking import path bug in app/patient/report/[sessionId].tsx (was '../../src/lib/api' — correct is '../../../src/lib/api'). Before the fix, visiting ANY route caused Metro to return a 500 Server Error because Expo Router's require.context pre-loads every route module. After fix + expo restart, home screen renders correctly and /patient/report/{sessionId} renders the report shell with 'Send report & book doctor' CTA (testID book-with-report-button present). Doctor active screen has the AI panel but is MISSING the expected testID 'ai-summary-{visitId}' (only /doctor index has it) — minor. All other testIDs verified in code: generate-report-button, book-with-report-button, ai-summary-{visitId} (doctor feed), download-rx-pdf, download-invoice-pdf.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/doctor/active.tsx",
+        "issue": "AI triage panel is rendered on accepted jobs (lines 133-160) but is missing testID='ai-summary-{v.id}' — the review request explicitly calls out this testID for both doctor/index AND doctor/active. doctor/index.tsx:177 has it; doctor/active.tsx:134 uses styles.aiPanel with no testID. Add: <View testID={`ai-summary-${v.id}`} style={styles.aiPanel}>",
+        "testID": "ai-summary-{visitId}",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "expo-print & expo-sharing",
+        "issue": "Expo doctor warning in logs: 'expo-print@55.0.13 expected ~15.0.8; expo-sharing@55.0.18 expected ~14.0.8'. Versions are far ahead of the installed Expo SDK's expected range. PDF export (download-rx-pdf / download-invoice-pdf) may or may not work on native — on web it falls back to window.print which should be fine, but on native this version mismatch can cause runtime failures. Recommend: yarn add expo-print@~15.0.8 expo-sharing@~14.0.8 (or whatever matches the installed expo SDK)."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4_ai_report.py",
+    "/app/test_reports/pytest/iteration4_results.xml"
+  ],
+  "action_items": [
+    "P0 (ALREADY FIXED by testing agent): Corrected relative import in /app/frontend/app/patient/report/[sessionId].tsx from '../../src/lib/api' to '../../../src/lib/api'. Without this, Expo Router's require.context broke EVERY route with a 500 Server Error bundler failure. Please keep the fix.",
+    "P2: Add testID={`ai-summary-${v.id}`} to the AI panel wrapper in /app/frontend/app/doctor/active.tsx (around line 134) so automated tests can locate it — doctor/index.tsx already has it.",
+    "P2: Align expo-print/expo-sharing versions with the installed Expo SDK (doctor warning shown in expo logs). Native PDF share may crash otherwise.",
+    "Carryover from iteration 4: /api/payments/checkout/status/{sid} still 500s on upstream emergentintegrations CheckoutStatusResponse 'metadata' validation — unchanged in this iteration."
+  ],
+  "critical_code_review_comments": [
+    "server.py /api/visits correctly copies report into visit.symptom_summary and overrides urgency + symptoms from the report when symptom_report_id is provided (L282-298). Verified with test_create_visit_with_symptom_report_copies_summary.",
+    "server.py /symptom-check counts user turns via db.chat_messages.count_documents AFTER inserting the user message, so ready_for_report flips true on the 3rd user turn as required (L412-414 + L440).",
+    "server.py /symptom-check/{sid}/report has robust JSON parsing with code-fence stripping and a sensible fallback object if Claude returns malformed JSON (L508-526). Upserts by session_id so repeat calls update the same report.",
+    "api.ts getReport/getPrescription/getInvoice correctly guard against backend returning literal 'null' text — parses as null instead of throwing. Good pattern.",
+    "patient/report/[sessionId].tsx auto-calls generateReport when getReport returns null on first visit (load() L36-44). Uses useFocusEffect so navigation back refreshes.",
+    "doctor/index.tsx AI panel (L177) is properly wired with testID=`ai-summary-${v.id}` and shows patient_summary + OTC meds list exactly as spec'd.",
+    "doctor/active.tsx AI panel is rendered but without the testID — inconsistency with doctor/index.tsx.",
+    "prescription/[visitId].tsx L127 download-rx-pdf button is present; invoice/[visitId].tsx L259 download-invoice-pdf button is present.",
+    "Import path bug at /app/frontend/app/patient/report/[sessionId].tsx was catastrophic: because Expo Router uses require.context to eager-load every route, one bad import bricks the entire app with a Metro 500 on all routes. Fixed by testing agent."
+  ],
+  "updated_files": [
+    "/app/frontend/app/patient/report/[sessionId].tsx (import path fix — '../../src/lib/api' -> '../../../src/lib/api')",
+    "/app/backend/tests/test_iteration4_ai_report.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8 iteration-4 tests pass)", "frontend": "Bundler recovered after fix; routes load without red screen; testIDs verified in source. Live tap-through of the full patient→doctor→Rx→pay flow not executed end-to-end due to RN-Web TouchableOpacity click-harness limitation documented in iteration_4."},
+  "seed_data_creation": "Test run created TEST_-prefixed patient users + 2 TEST_ visits (one with symptom_report_id, one without) and 1 symptom_report in the db. No cleanup required — all prefixed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration-4 AI-report + PDF features verified at API level and bundle level. ONE high-priority fix was applied by the testing agent: import path in patient/report/[sessionId].tsx. If you add more screens under app/patient/*/*.tsx, remember the relative-path depth is THREE dots-up (../../../) to reach /app/frontend/src. The AI report LLM call takes ~2-6s; leave generous timeouts (60-120s) on report tests. The report endpoint is idempotent (upsert by session_id). For end-to-end UI, prior iteration notes already show that clicking the 'Continue' TouchableOpacity on the initial name-entry screen via Playwright text/role selectors fails — use data-testid='login-continue-button' (if present) or click via page.evaluate with dispatchEvent if needed.",
+  "rca_of_issue": "RCA: patient/report/[sessionId].tsx lives at depth /app/frontend/app/patient/report/ — 3 levels below /app/frontend/. The author wrote '../../src/lib/api' (2 up) which resolves to /app/frontend/app/src/lib/api and doesn't exist. Expo Router's require.context eagerly imports every file under /app on startup to build the route manifest, so even visiting unrelated routes triggered the Metro resolver, returning a 500 Server Error html page for ALL routes. Reproduction: before fix, `curl -I https://<host>/` returned HTML with 'Unable to resolve module ../../src/lib/api'. Mitigation: change import to '../../../src/lib/api' and `sudo supervisorctl restart expo` to clear Metro's cached error. Verified post-fix via browser: home renders NURTIX hero; /patient/report/<sid> renders report shell."
+}

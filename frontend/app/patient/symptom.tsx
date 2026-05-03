@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, storage, COLORS } from '../../src/lib/api';
 
@@ -21,10 +22,13 @@ interface Msg {
 }
 
 export default function SymptomChecker() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState('');
+  const [userTurns, setUserTurns] = useState(0);
+  const [readyForReport, setReadyForReport] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -59,6 +63,8 @@ export default function SymptomChecker() {
         ...m,
         { id: r.message_id, role: 'assistant', content: r.reply },
       ]);
+      if (typeof r.user_turns === 'number') setUserTurns(r.user_turns);
+      if (r.ready_for_report) setReadyForReport(true);
     } catch (e) {
       setMessages((m) => [
         ...m,
@@ -138,6 +144,20 @@ export default function SymptomChecker() {
             <Ionicons name="arrow-up" size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
+
+        {readyForReport && (
+          <TouchableOpacity
+            testID="generate-report-button"
+            style={styles.reportCta}
+            onPress={() => router.push(`/patient/report/${sessionId}`)}
+          >
+            <Ionicons name="document-text" size={18} color="#FFF" />
+            <Text style={styles.reportCtaText}>
+              Generate AI report & request a doctor
+            </Text>
+            <Ionicons name="arrow-forward" size={16} color="#FFF" />
+          </TouchableOpacity>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -205,4 +225,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  reportCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 999,
+    paddingVertical: 14,
+    marginBottom: 14,
+  },
+  reportCtaText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
 });

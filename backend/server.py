@@ -80,6 +80,7 @@ class VisitCreate(BaseModel):
     symptoms: str
     urgency: Literal["routine", "urgent", "asap"] = "urgent"
     patient_location: dict  # {lat, lng}
+    symptom_report_id: Optional[str] = None
 
 
 class Visit(BaseModel):
@@ -99,6 +100,8 @@ class Visit(BaseModel):
     created_at: str
     accepted_at: Optional[str] = None
     completed_at: Optional[str] = None
+    symptom_report_id: Optional[str] = None
+    symptom_summary: Optional[dict] = None
 
 
 class StatusUpdate(BaseModel):
@@ -273,16 +276,38 @@ async def doctor_reviews(doctor_id: str):
 # Visits
 @api_router.post("/visits", response_model=Visit)
 async def create_visit(payload: VisitCreate):
+    summary = None
+    urgency = payload.urgency
+    symptoms = payload.symptoms
+    if payload.symptom_report_id:
+        rpt = await db.symptom_reports.find_one({"id": payload.symptom_report_id}, {"_id": 0})
+        if rpt:
+            summary = {
+                "chief_complaint": rpt.get("chief_complaint"),
+                "duration": rpt.get("duration"),
+                "severity": rpt.get("severity"),
+                "key_symptoms": rpt.get("key_symptoms", []),
+                "red_flags": rpt.get("red_flags", []),
+                "patient_summary": rpt.get("patient_summary"),
+                "suggested_initial_medications": rpt.get("suggested_initial_medications", []),
+                "triage_recommendation": rpt.get("triage_recommendation"),
+                "urgency": rpt.get("urgency"),
+            }
+            urgency = rpt.get("urgency", urgency)
+            symptoms = rpt.get("chief_complaint") or symptoms
+
     visit = Visit(
         id=str(uuid.uuid4()),
         patient_id=payload.patient_id,
         patient_name=payload.patient_name,
         address=payload.address,
-        symptoms=payload.symptoms,
-        urgency=payload.urgency,
+        symptoms=symptoms,
+        urgency=urgency,
         patient_location=payload.patient_location,
         status="pending",
         created_at=now_iso(),
+        symptom_report_id=payload.symptom_report_id,
+        symptom_summary=summary,
     )
     await db.visits.insert_one(visit.dict())
     return visit
@@ -383,6 +408,11 @@ async def symptom_check(payload: SymptomMessage):
     )
     await db.chat_messages.insert_one(user_msg.dict())
 
+    # count existing user turns to know if ready for report
+    user_turn_count = await db.chat_messages.count_documents(
+        {"session_id": payload.session_id, "role": "user"}
+    )
+
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
@@ -403,7 +433,124 @@ async def symptom_check(payload: SymptomMessage):
         created_at=now_iso(),
     )
     await db.chat_messages.insert_one(ai_msg.dict())
-    return {"reply": reply, "message_id": ai_msg.id}
+    return {
+        "reply": reply,
+        "message_id": ai_msg.id,
+        "user_turns": user_turn_count,
+        "ready_for_report": user_turn_count >= 3,
+    }
+
+
+# ===== Symptom Report =====
+REPORT_SYSTEM = """You are a medical triage report generator. Based on the conversation between patient and triage assistant, produce a concise, structured JSON summary for the visiting doctor.
+Return ONLY valid JSON (no markdown) with keys:
+{
+  "chief_complaint": "one short line",
+  "duration": "e.g., 2 days",
+  "severity": "mild|moderate|severe",
+  "key_symptoms": ["list of 2-5 symptoms"],
+  "red_flags": ["list any urgent signs or empty list"],
+  "patient_summary": "2-3 sentence summary",
+  "suggested_initial_medications": [
+     {"name": "generic OTC medicine", "reason": "brief rationale"}
+  ],
+  "triage_recommendation": "home_visit|emergency|self_care",
+  "urgency": "routine|urgent|asap"
+}
+Keep suggested medications conservative OTC basics (e.g., paracetamol, ORS). Never prescribe antibiotics or schedule drugs.
+If red flags detected, set triage_recommendation='emergency' and urgency='asap'.
+"""
+
+
+class SymptomReport(BaseModel):
+    id: str
+    session_id: str
+    chief_complaint: str
+    duration: str
+    severity: str
+    key_symptoms: List[str]
+    red_flags: List[str]
+    patient_summary: str
+    suggested_initial_medications: List[dict]
+    triage_recommendation: str
+    urgency: str
+    created_at: str
+
+
+@api_router.post("/symptom-check/{session_id}/report", response_model=SymptomReport)
+async def generate_report(session_id: str):
+    msgs = await db.chat_messages.find(
+        {"session_id": session_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(200)
+    if not msgs:
+        raise HTTPException(404, "No conversation found")
+
+    transcript = "\n".join(
+        f"{'Patient' if m['role'] == 'user' else 'Assistant'}: {m['content']}" for m in msgs
+    )
+
+    import json as _json
+
+    raw = ""
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"{session_id}-report",
+            system_message=REPORT_SYSTEM,
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        raw = await chat.send_message(
+            UserMessage(text=f"Conversation transcript:\n{transcript}\n\nGenerate the JSON report now.")
+        )
+    except Exception as e:
+        logging.exception("Report LLM error")
+
+    # clean fenced code
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:].strip()
+    try:
+        data = _json.loads(cleaned)
+    except Exception:
+        data = {
+            "chief_complaint": "Unspecified symptom",
+            "duration": "Unknown",
+            "severity": "moderate",
+            "key_symptoms": [],
+            "red_flags": [],
+            "patient_summary": (msgs[0]["content"][:200] if msgs else ""),
+            "suggested_initial_medications": [],
+            "triage_recommendation": "home_visit",
+            "urgency": "urgent",
+        }
+
+    report = SymptomReport(
+        id=str(uuid.uuid4()),
+        session_id=session_id,
+        chief_complaint=data.get("chief_complaint", "Unspecified"),
+        duration=data.get("duration", ""),
+        severity=data.get("severity", "moderate"),
+        key_symptoms=data.get("key_symptoms", []) or [],
+        red_flags=data.get("red_flags", []) or [],
+        patient_summary=data.get("patient_summary", ""),
+        suggested_initial_medications=data.get("suggested_initial_medications", []) or [],
+        triage_recommendation=data.get("triage_recommendation", "home_visit"),
+        urgency=data.get("urgency", "urgent"),
+        created_at=now_iso(),
+    )
+    # upsert (one report per session)
+    await db.symptom_reports.update_one(
+        {"session_id": session_id}, {"$set": report.dict()}, upsert=True
+    )
+    return report
+
+
+@api_router.get("/symptom-check/{session_id}/report", response_model=Optional[SymptomReport])
+async def get_report(session_id: str):
+    r = await db.symptom_reports.find_one({"session_id": session_id}, {"_id": 0})
+    return SymptomReport(**r) if r else None
+
 
 
 @api_router.get("/symptom-check/{session_id}/messages", response_model=List[ChatMessage])

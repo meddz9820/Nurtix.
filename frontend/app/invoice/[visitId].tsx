@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { api, COLORS } from '../../src/lib/api';
+import { invoiceHtml, sharePdf } from '../../src/lib/pdf';
 
 export default function InvoiceView() {
   const router = useRouter();
@@ -253,6 +254,15 @@ export default function InvoiceView() {
                 )}
               </TouchableOpacity>
             )}
+
+            <TouchableOpacity
+              testID="download-invoice-pdf"
+              style={styles.pdfBtn}
+              onPress={() => sharePdf(invoiceHtml(inv), `NURTIX_Invoice_${inv.id.slice(0, 8)}.pdf`)}
+            >
+              <Ionicons name="download-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.pdfBtnText}>Download / Share PDF</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -355,4 +365,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   payText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  pdfBtn: {
+    marginTop: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 999,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pdfBtnText: { color: COLORS.primary, fontSize: 14, fontWeight: '700' },
 });

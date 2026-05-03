@@ -14,6 +14,7 @@ export default function RootLayout() {
         <Stack.Screen name="tracking/[id]" options={{ presentation: 'card' }} />
         <Stack.Screen name="prescription/[visitId]" options={{ presentation: 'card' }} />
         <Stack.Screen name="invoice/[visitId]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="patient/report/[sessionId]" options={{ presentation: 'card' }} />
       </Stack>
     </SafeAreaProvider>
   );

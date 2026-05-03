@@ -53,17 +53,9 @@ export default function PatientHome() {
     setRefreshing(false);
   };
 
-  const requestVisit = async () => {
-    if (!user) return;
-    const visit = await api.createVisit({
-      patient_id: user.id,
-      patient_name: user.name,
-      address: '12, Linden Avenue, Indiranagar',
-      symptoms: 'Fever, body ache, headache',
-      urgency: 'urgent',
-      patient_location: { lat: 12.9716, lng: 77.5946 },
-    });
-    router.push(`/tracking/${visit.id}`);
+  const requestVisit = () => {
+    // Primary flow: always go through AI symptom checker first
+    router.push('/patient/symptom');
   };
 
   const logout = async () => {
@@ -121,12 +113,12 @@ export default function PatientHome() {
             onPress={requestVisit}
             activeOpacity={0.9}
           >
-            <Text style={styles.heroLabel}>ONE-TAP BOOKING</Text>
-            <Text style={styles.heroTitle}>Book a doctor{'\n'}home visit</Text>
+            <Text style={styles.heroLabel}>AI-FIRST BOOKING</Text>
+            <Text style={styles.heroTitle}>Tell our AI,{'\n'}then book a doctor</Text>
             <View style={styles.heroFooter}>
-              <Text style={styles.heroSub}>Avg arrival · 22 min</Text>
+              <Text style={styles.heroSub}>3 quick questions · avg 22 min ETA</Text>
               <View style={styles.heroBtn}>
-                <Text style={styles.heroBtnText}>Request now</Text>
+                <Text style={styles.heroBtnText}>Start</Text>
                 <Ionicons name="arrow-forward" size={16} color="#FFF" />
               </View>
             </View>

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../../src/lib/api';
+import { prescriptionHtml, sharePdf } from '../../src/lib/pdf';
 
 export default function PrescriptionView() {
   const router = useRouter();
@@ -120,6 +121,18 @@ export default function PrescriptionView() {
           </View>
         )}
       </ScrollView>
+      {rx && (
+        <View style={styles.pdfBar}>
+          <TouchableOpacity
+            testID="download-rx-pdf"
+            style={styles.pdfBtn}
+            onPress={() => sharePdf(prescriptionHtml(rx), `NURTIX_Rx_${rx.id.slice(0, 8)}.pdf`)}
+          >
+            <Ionicons name="download-outline" size={18} color="#FFF" />
+            <Text style={styles.pdfText}>Download / Share PDF</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -206,4 +219,21 @@ const styles = StyleSheet.create({
   rxFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rxDoctor: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginTop: 2 },
   rxSigned: { fontSize: 11, color: COLORS.success, fontWeight: '700', marginTop: 4 },
+  pdfBar: {
+    padding: 16,
+    paddingBottom: 24,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surface,
+  },
+  pdfBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 999,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pdfText: { color: '#FFF', fontWeight: '700' },
 });

@@ -139,6 +139,18 @@ export const api = {
     });
     return r.json();
   },
+  async generateReport(sessionId: string) {
+    const r = await fetch(`${API}/symptom-check/${sessionId}/report`, {
+      method: 'POST',
+    });
+    return r.json();
+  },
+  async getReport(sessionId: string) {
+    const r = await fetch(`${API}/symptom-check/${sessionId}/report`);
+    const txt = await r.text();
+    if (!txt || txt === 'null') return null;
+    return JSON.parse(txt);
+  },
   async getChatMessages(sessionId: string) {
     const r = await fetch(`${API}/symptom-check/${sessionId}/messages`);
     return r.json();

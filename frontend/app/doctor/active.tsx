@@ -130,6 +130,35 @@ export default function ActiveJobs() {
                 <Text style={styles.patient}>{v.patient_name}</Text>
                 <Text style={styles.symptoms}>{v.symptoms}</Text>
 
+                {v.symptom_summary && (
+                  <View style={styles.aiPanel}>
+                    <View style={styles.aiHead}>
+                      <Ionicons name="sparkles" size={12} color={COLORS.accent} />
+                      <Text style={styles.aiHeadText}>AI TRIAGE REPORT</Text>
+                    </View>
+                    <Text style={styles.aiSummary}>
+                      {v.symptom_summary.patient_summary}
+                    </Text>
+                    {(v.symptom_summary.key_symptoms || []).length > 0 && (
+                      <View style={styles.chips}>
+                        {(v.symptom_summary.key_symptoms || []).map((s: string, i: number) => (
+                          <View key={i} style={styles.chip}>
+                            <Text style={styles.chipText}>{s}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    {(v.symptom_summary.suggested_initial_medications || []).length > 0 && (
+                      <Text style={styles.aiMeds}>
+                        Suggested OTC:{' '}
+                        {(v.symptom_summary.suggested_initial_medications || [])
+                          .map((m: any) => m.name)
+                          .join(', ')}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
                 <View style={styles.addrRow}>
                   <Ionicons name="location" size={14} color={COLORS.primary} />
                   <Text style={styles.addr}>{v.address}</Text>
@@ -198,6 +227,21 @@ const styles = StyleSheet.create({
   eta: { marginLeft: 'auto', color: COLORS.accent, fontWeight: '700', fontSize: 13 },
   patient: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
   symptoms: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  aiPanel: {
+    backgroundColor: COLORS.bg,
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.accent,
+  },
+  aiHead: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  aiHeadText: { color: COLORS.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  aiSummary: { fontSize: 12, color: COLORS.textPrimary, lineHeight: 17 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 },
+  chip: { backgroundColor: COLORS.surface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  chipText: { color: COLORS.primary, fontSize: 11, fontWeight: '600' },
+  aiMeds: { fontSize: 11, color: COLORS.primary, marginTop: 6, fontWeight: '600', fontStyle: 'italic' },
   addrRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   addr: { fontSize: 13, color: COLORS.textPrimary, flex: 1 },
   rxBtn: {

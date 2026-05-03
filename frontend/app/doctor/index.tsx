@@ -173,6 +173,26 @@ export default function DoctorFeed() {
               </View>
               <Text style={styles.jobPatient}>{v.patient_name}</Text>
               <Text style={styles.jobSymptoms}>{v.symptoms}</Text>
+              {v.symptom_summary && (
+                <View style={styles.aiPanel} testID={`ai-summary-${v.id}`}>
+                  <View style={styles.aiHead}>
+                    <Ionicons name="sparkles" size={12} color={COLORS.accent} />
+                    <Text style={styles.aiHeadText}>AI TRIAGE REPORT</Text>
+                  </View>
+                  <Text style={styles.aiSummary} numberOfLines={3}>
+                    {v.symptom_summary.patient_summary}
+                  </Text>
+                  {(v.symptom_summary.suggested_initial_medications || []).length > 0 && (
+                    <Text style={styles.aiMeds}>
+                      Suggested OTC:{' '}
+                      {(v.symptom_summary.suggested_initial_medications || [])
+                        .map((m: any) => m.name)
+                        .slice(0, 3)
+                        .join(', ')}
+                    </Text>
+                  )}
+                </View>
+              )}
               <View style={styles.jobMeta}>
                 <Ionicons name="location" size={12} color={COLORS.textSecondary} />
                 <Text style={styles.jobAddr}>{v.address}</Text>
@@ -267,6 +287,24 @@ const styles = StyleSheet.create({
   jobTime: { fontSize: 12, color: COLORS.textSecondary },
   jobPatient: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
   jobSymptoms: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4, marginBottom: 8 },
+  aiPanel: {
+    backgroundColor: COLORS.bg,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.accent,
+  },
+  aiHead: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  aiHeadText: { color: COLORS.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  aiSummary: { fontSize: 12, color: COLORS.textPrimary, lineHeight: 17 },
+  aiMeds: {
+    fontSize: 11,
+    color: COLORS.primary,
+    marginTop: 6,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
   jobMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
   jobAddr: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
   acceptBtn: {
