@@ -1,13 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,225 +12,235 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, storage, COLORS } from '../../src/lib/api';
 
-interface Msg {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
+interface Step {
+  key: 'category' | 'duration' | 'severity';
+  label: string;
+  question: string;
+  options: string[];
 }
 
-export default function SymptomChecker() {
+const STEPS: Step[] = [
+  {
+    key: 'category',
+    label: 'Question 1 of 3',
+    question: 'What is your primary symptom category?',
+    options: [
+      'Fever/Chills',
+      'Cough/Respiratory',
+      'Body Aches/Pain',
+      'Gastrointestinal',
+      'Other',
+    ],
+  },
+  {
+    key: 'duration',
+    label: 'Question 2 of 3',
+    question: 'How long have you been experiencing these symptoms?',
+    options: [
+      'Less than 24 hours',
+      '1–3 days',
+      '4–7 days',
+      'More than a week',
+    ],
+  },
+  {
+    key: 'severity',
+    label: 'Question 3 of 3',
+    question: 'How would you rate the severity of your discomfort?',
+    options: ['Mild', 'Moderate', 'Severe'],
+  },
+];
+
+export default function SymptomMcqWizard() {
   const router = useRouter();
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
   const [sessionId, setSessionId] = useState('');
-  const [userTurns, setUserTurns] = useState(0);
-  const [readyForReport, setReadyForReport] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     (async () => {
       const u = await storage.getUser();
-      const sid = `sym-${u?.id || 'anon'}-${Date.now()}`;
-      setSessionId(sid);
-      setMessages([
-        {
-          id: 'welcome',
-          role: 'assistant',
-          content: `Hi${u ? ' ' + u.name.split(' ')[0] : ''}! I'm here to help you decide if a home doctor visit is needed. What's been bothering you today?`,
-        },
-      ]);
+      setSessionId(`mcq-${u?.id || 'anon'}-${Date.now()}`);
     })();
   }, []);
 
-  const send = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg: Msg = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: input.trim(),
-    };
-    setMessages((m) => [...m, userMsg]);
-    const text = input.trim();
-    setInput('');
-    setLoading(true);
+  const step = STEPS[stepIdx];
+
+  const pick = async (option: string) => {
+    const updated = { ...answers, [step.key]: option };
+    setAnswers(updated);
+    if (stepIdx < STEPS.length - 1) {
+      setTimeout(() => setStepIdx(stepIdx + 1), 200);
+      return;
+    }
+    // last step → submit
+    setSubmitting(true);
     try {
-      const r = await api.sendSymptom(sessionId, text);
-      setMessages((m) => [
-        ...m,
-        { id: r.message_id, role: 'assistant', content: r.reply },
-      ]);
-      if (typeof r.user_turns === 'number') setUserTurns(r.user_turns);
-      if (r.ready_for_report) setReadyForReport(true);
-    } catch (e) {
-      setMessages((m) => [
-        ...m,
-        {
-          id: `e-${Date.now()}`,
-          role: 'assistant',
-          content: 'Sorry, I had trouble. Could you try again?',
-        },
-      ]);
+      const u = await storage.getUser();
+      const report = await api.generateMcqReport(sessionId, {
+        symptom_category: updated.category,
+        duration: updated.duration,
+        severity: updated.severity,
+        patient_name: u?.name || 'Patient',
+      });
+      if (report?.id) {
+        router.replace(`/patient/report/${sessionId}`);
+      }
     } finally {
-      setLoading(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      setSubmitting(false);
     }
   };
 
+  const back = () => {
+    if (stepIdx === 0) router.back();
+    else setStepIdx(stepIdx - 1);
+  };
+
+  if (submitting) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={styles.loadingIcon}>
+          <Ionicons name="sparkles" size={32} color={COLORS.accent} />
+        </View>
+        <Text style={styles.loadingTitle}>Generating your AI Report...</Text>
+        <Text style={styles.loadingSub}>Synthesizing your responses with NURTIX Triage AI</Text>
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 24 }} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <View style={styles.iconCircle}>
-          <Ionicons name="sparkles" size={20} color={COLORS.accent} />
-        </View>
+      <View style={styles.topRow}>
+        <TouchableOpacity onPress={back} style={styles.iconBtn} testID="back-button">
+          <Ionicons name="chevron-back" size={22} color={COLORS.primary} />
+        </TouchableOpacity>
         <View>
           <Text style={styles.label}>AI TRIAGE</Text>
           <Text style={styles.title}>Symptom Checker</Text>
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
-        <ScrollView
-          ref={scrollRef}
-          style={styles.chatList}
-          contentContainerStyle={{ paddingVertical: 16, paddingBottom: 24 }}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-        >
-          {messages.map((m) => (
-            <View
-              key={m.id}
-              style={[
-                styles.bubble,
-                m.role === 'user' ? styles.userBubble : styles.aiBubble,
-              ]}
-              testID={`chat-msg-${m.role}`}
-            >
-              <Text style={m.role === 'user' ? styles.userText : styles.aiText}>
-                {m.content}
-              </Text>
-            </View>
-          ))}
-          {loading && (
-            <View style={[styles.bubble, styles.aiBubble]}>
-              <ActivityIndicator color={COLORS.primary} size="small" />
-            </View>
-          )}
-        </ScrollView>
-
-        <View style={styles.inputRow}>
-          <TextInput
-            testID="symptom-input"
-            style={styles.input}
-            placeholder="Describe your symptoms..."
-            placeholderTextColor={COLORS.textDisabled}
-            value={input}
-            onChangeText={setInput}
-            multiline
-            onSubmitEditing={send}
+      <View style={styles.progressBar}>
+        {STEPS.map((s, i) => (
+          <View
+            key={s.key}
+            style={[
+              styles.progressDot,
+              i <= stepIdx && { backgroundColor: COLORS.accent },
+            ]}
           />
-          <TouchableOpacity
-            testID="symptom-send-button"
-            style={[styles.sendBtn, !input.trim() && { opacity: 0.4 }]}
-            disabled={!input.trim() || loading}
-            onPress={send}
-          >
-            <Ionicons name="arrow-up" size={20} color="#FFF" />
-          </TouchableOpacity>
-        </View>
+        ))}
+      </View>
 
-        {readyForReport && (
-          <TouchableOpacity
-            testID="generate-report-button"
-            style={styles.reportCta}
-            onPress={() => router.push(`/patient/report/${sessionId}`)}
-          >
-            <Ionicons name="document-text" size={18} color="#FFF" />
-            <Text style={styles.reportCtaText}>
-              Generate AI report & request a doctor
-            </Text>
-            <Ionicons name="arrow-forward" size={16} color="#FFF" />
-          </TouchableOpacity>
-        )}
-      </KeyboardAvoidingView>
+      <ScrollView contentContainerStyle={styles.body}>
+        <Text style={styles.qLabel}>{step.label}</Text>
+        <Text style={styles.qText}>{step.question}</Text>
+
+        <View style={styles.options}>
+          {step.options.map((opt) => {
+            const selected = answers[step.key] === opt;
+            return (
+              <TouchableOpacity
+                key={opt}
+                testID={`option-${step.key}-${opt.replace(/\s/g, '-')}`}
+                style={[styles.option, selected && styles.optionSelected]}
+                onPress={() => pick(opt)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                  {opt}
+                </Text>
+                <Ionicons
+                  name={selected ? 'radio-button-on' : 'radio-button-off'}
+                  size={20}
+                  color={selected ? COLORS.accent : COLORS.textDisabled}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 20 },
-  header: {
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
+    paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFE6E2',
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: { fontSize: 10, letterSpacing: 3, color: COLORS.textSecondary },
   title: { fontSize: 22, fontWeight: '800', color: COLORS.textPrimary },
-  chatList: { flex: 1 },
-  bubble: { padding: 14, borderRadius: 18, marginVertical: 6, maxWidth: '85%' },
-  userBubble: {
-    backgroundColor: COLORS.primary,
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
-  },
-  aiBubble: {
-    backgroundColor: '#FFF',
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: COLORS.surface,
-  },
-  userText: { color: '#FFF', fontSize: 15, lineHeight: 22 },
-  aiText: { color: COLORS.textPrimary, fontSize: 15, lineHeight: 22 },
-  inputRow: {
+  progressBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
-    paddingVertical: 10,
-    paddingBottom: 14,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderRadius: 22,
-    paddingHorizontal: 18,
+    gap: 6,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    fontSize: 15,
+  },
+  progressDot: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.surface,
+  },
+  body: { padding: 20, paddingTop: 12, paddingBottom: 40 },
+  qLabel: { fontSize: 11, letterSpacing: 2, color: COLORS.accent, fontWeight: '800' },
+  qText: {
+    fontSize: 24,
+    fontWeight: '800',
     color: COLORS.textPrimary,
-    borderWidth: 1,
-    borderColor: COLORS.surface,
-    maxHeight: 120,
+    marginTop: 8,
+    marginBottom: 24,
+    lineHeight: 30,
   },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reportCta: {
+  options: { gap: 10 },
+  option: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: COLORS.primary,
-    borderRadius: 999,
-    paddingVertical: 14,
-    marginBottom: 14,
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
   },
-  reportCtaText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  optionSelected: {
+    borderColor: COLORS.accent,
+    backgroundColor: '#FFF5F2',
+  },
+  optionText: { fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
+  optionTextSelected: { color: COLORS.accent },
+  loadingIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFF5F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  loadingTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center' },
+  loadingSub: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 30,
+  },
 });

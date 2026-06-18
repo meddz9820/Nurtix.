@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -32,9 +33,15 @@ export default function ActiveJobs() {
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [active, setActive] = useState<Visit[]>([]);
   const [rxMap, setRxMap] = useState<Record<string, boolean>>({});
+  const [kit, setKit] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [endModal, setEndModal] = useState<Visit | null>(null);
+  const [picked, setPicked] = useState<Record<string, number>>({});
+  const [supplyOk, setSupplyOk] = useState<boolean | null>(null);
+  const [supplyMissing, setSupplyMissing] = useState<string[]>([]);
+  const [ending, setEnding] = useState(false);
 
   const load = useCallback(async () => {
     const u = await storage.getUser();
@@ -50,6 +57,8 @@ export default function ActiveJobs() {
         a.map((v) => api.getPrescription(v.id).then((r) => [v.id, !!r] as const)),
       );
       setRxMap(Object.fromEntries(rxResults));
+      const k = await api.getKit(me.id);
+      setKit(k);
     }
     setLoading(false);
   }, []);
@@ -68,8 +77,25 @@ export default function ActiveJobs() {
   const advance = async (v: Visit) => {
     const next = NEXT_STATUS[v.status];
     if (!next) return;
-    if (next === 'completed' && !rxMap[v.id]) {
-      showAlert('Please write a prescription before marking the visit completed.');
+    // Pre-trip Supply Validation: ensure kit exists before doctor starts (accepted -> en_route)
+    if (next === 'en_route') {
+      if (!kit) {
+        showAlert('Please QR-scan a Dark Store kit from the Kit tab before starting the trip.');
+        router.push('/doctor/inventory');
+        return;
+      }
+      const v2 = await api.validateSupply(v.id);
+      if (!v2.ok && (v2.missing || []).length > 0) {
+        showAlert(`Missing items for triage: ${v2.missing.join(', ')}. Restock or proceed at risk.`);
+      }
+    }
+    if (next === 'completed') {
+      // Open dispense modal instead of straight status update
+      setEndModal(v);
+      setPicked({});
+      const v2 = await api.validateSupply(v.id);
+      setSupplyOk(v2.ok);
+      setSupplyMissing(v2.missing || []);
       return;
     }
     setUpdating(v.id);
@@ -78,6 +104,50 @@ export default function ActiveJobs() {
       await load();
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const adjust = (id: string, delta: number) => {
+    setPicked((p) => {
+      const next = (p[id] || 0) + delta;
+      const np = { ...p };
+      if (next <= 0) delete np[id];
+      else np[id] = next;
+      return np;
+    });
+  };
+
+  const submitEnd = async () => {
+    if (!endModal || !doctor) return;
+    const dispensed = Object.entries(picked).map(([item_id, qty]) => ({ item_id, qty }));
+    if (dispensed.length === 0) {
+      showAlert('Select at least one medication to dispense, or use Skip.');
+      return;
+    }
+    setEnding(true);
+    try {
+      const r = await api.endVisit(endModal.id, doctor.id, dispensed);
+      if (r?.ok) {
+        setEndModal(null);
+        await load();
+        showAlert('Visit closed. Tri-party reconciliation complete.');
+      } else {
+        showAlert(r?.detail || 'Could not end visit.');
+      }
+    } finally {
+      setEnding(false);
+    }
+  };
+
+  const skipEnd = async () => {
+    if (!endModal || !doctor) return;
+    setEnding(true);
+    try {
+      await api.endVisit(endModal.id, doctor.id, []);
+      setEndModal(null);
+      await load();
+    } finally {
+      setEnding(false);
     }
   };
 
@@ -158,6 +228,20 @@ export default function ActiveJobs() {
                     )}
                   </View>
                 )}
+                {v.mcq_answers && (
+                  <View style={styles.rawPanel} testID={`raw-mcq-${v.id}`}>
+                    <Text style={styles.rawLabel}>PATIENT RAW DATA</Text>
+                    <Text style={styles.rawValue}>
+                      {[
+                        v.mcq_answers.symptom_category,
+                        v.mcq_answers.duration,
+                        v.mcq_answers.severity + ' Severity',
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.addrRow}>
                   <Ionicons name="location" size={14} color={COLORS.primary} />
@@ -197,6 +281,82 @@ export default function ActiveJobs() {
           })
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!endModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEndModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.handle} />
+            <Text style={styles.modalTitle}>End Visit · Dispense Medication</Text>
+            <Text style={styles.modalSub}>
+              Pick items from your mobile bag. Tri-party reconciliation will run on confirm.
+            </Text>
+            {supplyOk === false && supplyMissing.length > 0 && (
+              <View style={styles.warnBar}>
+                <Ionicons name="warning" size={14} color={COLORS.warning} />
+                <Text style={styles.warnText}>
+                  Suggested but missing: {supplyMissing.join(', ')}
+                </Text>
+              </View>
+            )}
+            <ScrollView style={{ maxHeight: 260 }}>
+              {Object.entries(kit?.items || {}).map(([id, qty]: any) => {
+                if (qty <= 0) return null;
+                const picked_qty = picked[id] || 0;
+                return (
+                  <View key={id} style={styles.dispRow} testID={`dispense-${id}`}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.dispName}>{ITEM_LABELS[id] || id}</Text>
+                      <Text style={styles.dispStock}>Bag: {qty}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.qtyBtn}
+                      onPress={() => adjust(id, -1)}
+                      disabled={picked_qty === 0}
+                    >
+                      <Ionicons name="remove" size={16} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.qtyVal}>{picked_qty}</Text>
+                    <TouchableOpacity
+                      style={styles.qtyBtn}
+                      onPress={() => adjust(id, 1)}
+                      disabled={picked_qty >= qty}
+                    >
+                      <Ionicons name="add" size={16} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalCancel]}
+                onPress={skipEnd}
+                disabled={ending}
+                testID="skip-dispense"
+              >
+                <Text style={styles.modalCancelText}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalConfirm, ending && { opacity: 0.6 }]}
+                onPress={submitEnd}
+                disabled={ending}
+                testID="confirm-end-visit"
+              >
+                {ending ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>End Visit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -242,6 +402,16 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: COLORS.surface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   chipText: { color: COLORS.primary, fontSize: 11, fontWeight: '600' },
   aiMeds: { fontSize: 11, color: COLORS.primary, marginTop: 6, fontWeight: '600', fontStyle: 'italic' },
+  rawPanel: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
+  },
+  rawLabel: { fontSize: 10, letterSpacing: 2, fontWeight: '800', color: COLORS.textSecondary },
+  rawValue: { fontSize: 12, color: COLORS.textPrimary, marginTop: 4, fontWeight: '600' },
   addrRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   addr: { fontSize: 13, color: COLORS.textPrimary, flex: 1 },
   rxBtn: {
@@ -265,4 +435,29 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   ctaText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(18,53,36,0.45)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 30 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.surface, alignSelf: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary },
+  modalSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4, marginBottom: 14 },
+  warnBar: { flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: '#FFF4D9', padding: 10, borderRadius: 12, marginBottom: 10 },
+  warnText: { color: COLORS.textPrimary, fontSize: 12, flex: 1 },
+  dispRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.surface },
+  dispName: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
+  dispStock: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  qtyBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyVal: { width: 24, textAlign: 'center', fontWeight: '700', color: COLORS.textPrimary },
+  modalBtnRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 999, alignItems: 'center' },
+  modalCancel: { backgroundColor: COLORS.surface },
+  modalCancelText: { color: COLORS.primary, fontWeight: '700' },
+  modalConfirm: { backgroundColor: COLORS.accent },
+  modalConfirmText: { color: '#FFF', fontWeight: '700' },
 });

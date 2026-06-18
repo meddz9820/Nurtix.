@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, Visit } from '../../src/lib/api';
+import { api, storage, COLORS, Visit } from '../../src/lib/api';
 
 const MAP_BG =
   'https://static.prod-images.emergentagent.com/jobs/f08a18ff-24d5-457c-8a3e-02c34daf0994/images/1050a85ecab9bf64a1b82e04b9bbb1eca3ee6088d2696491af833faae2b97f61.png';
@@ -31,12 +31,20 @@ export default function LiveTracking() {
   const [visit, setVisit] = useState<Visit | null>(null);
   const [loading, setLoading] = useState(true);
   const [eta, setEta] = useState<number | null>(null);
+  const [review, setReview] = useState<any>(null);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     const v = await api.getVisit(id);
     setVisit(v);
     setEta(v.eta_minutes ?? null);
+    if (v.status === 'completed') {
+      const r = await api.getVisitReview(v.id);
+      setReview(r);
+    }
     setLoading(false);
   }, [id]);
 
@@ -166,6 +174,90 @@ export default function LiveTracking() {
                 <Ionicons name="receipt-outline" size={18} color={COLORS.primary} />
                 <Text style={styles.actionText}>Invoice</Text>
               </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {visit.status === 'completed' && visit.doctor_id && (
+          <View style={styles.reviewCard} testID="review-section">
+            {review ? (
+              <>
+                <Text style={styles.reviewThanks}>✓ Thanks for your review</Text>
+                <View style={styles.starsRow}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Ionicons
+                      key={n}
+                      name="star"
+                      size={18}
+                      color={n <= review.rating ? COLORS.warning : COLORS.surface}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.reviewComment}>{review.comment}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.reviewTitle}>Rate your visit</Text>
+                <Text style={styles.reviewSub}>How was Dr. {(visit.doctor_name || '').split(' ').slice(1).join(' ')}?</Text>
+                <View style={styles.starsRow}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <TouchableOpacity
+                      key={n}
+                      onPress={() => setRating(n)}
+                      testID={`star-${n}`}
+                    >
+                      <Ionicons
+                        name="star"
+                        size={34}
+                        color={n <= rating ? COLORS.warning : COLORS.surface}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  testID="review-comment-input"
+                  value={comment}
+                  onChangeText={setComment}
+                  placeholder="Share your experience (optional)"
+                  placeholderTextColor={COLORS.textDisabled}
+                  multiline
+                  style={styles.reviewInput}
+                />
+                <TouchableOpacity
+                  testID="submit-review"
+                  style={[styles.reviewBtn, (rating === 0 || submitting) && { opacity: 0.5 }]}
+                  disabled={rating === 0 || submitting}
+                  onPress={async () => {
+                    if (rating === 0 || !visit.doctor_id) return;
+                    const u = await storage.getUser();
+                    setSubmitting(true);
+                    try {
+                      const r = await api.submitReview({
+                        doctor_id: visit.doctor_id,
+                        visit_id: visit.id,
+                        patient_name: u?.name || visit.patient_name,
+                        rating,
+                        comment: comment.trim() || 'Great visit!',
+                      });
+                      setReview(r);
+                      const msg = 'Thanks for your feedback!';
+                      if (Platform.OS === 'web') window.alert(msg);
+                      else Alert.alert('NURTIX', msg);
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={16} color="#FFF" />
+                      <Text style={styles.reviewBtnText}>Submit review</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
             )}
           </View>
         )}
@@ -317,4 +409,40 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   actionText: { color: COLORS.primary, fontWeight: '700', fontSize: 13 },
+  reviewCard: {
+    marginTop: 14,
+    backgroundColor: COLORS.bg,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
+  },
+  reviewTitle: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary },
+  reviewSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2, marginBottom: 10 },
+  reviewThanks: { fontSize: 15, fontWeight: '800', color: COLORS.success, marginBottom: 8 },
+  reviewComment: { fontSize: 13, color: COLORS.textSecondary, marginTop: 6, lineHeight: 20 },
+  starsRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  reviewInput: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    marginBottom: 10,
+  },
+  reviewBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.accent,
+    borderRadius: 999,
+    paddingVertical: 13,
+  },
+  reviewBtnText: { color: '#FFF', fontWeight: '700' },
 });

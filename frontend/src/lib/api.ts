@@ -109,6 +109,9 @@ export const api = {
     const r = await fetch(`${API}/visits/doctor/feed`);
     return r.json();
   },
+  async _doctorFeedLegacyREMOVED() {
+    return [];
+  },
   async doctorActive(doctorId: string): Promise<Visit[]> {
     const r = await fetch(`${API}/visits/doctor/${doctorId}/active`);
     return r.json();
@@ -151,6 +154,61 @@ export const api = {
     if (!txt || txt === 'null') return null;
     return JSON.parse(txt);
   },
+  async generateMcqReport(sessionId: string, answers: any) {
+    const r = await fetch(`${API}/symptom-check/${sessionId}/report-mcq`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(answers),
+    });
+    return r.json();
+  },
+  async listDarkStores() {
+    const r = await fetch(`${API}/dark-stores`);
+    return r.json();
+  },
+  async getKit(doctorId: string) {
+    const r = await fetch(`${API}/doctors/${doctorId}/kit`);
+    const txt = await r.text();
+    if (!txt || txt === 'null') return null;
+    return JSON.parse(txt);
+  },
+  async checkoutKit(doctorId: string, darkStoreId: string) {
+    const r = await fetch(`${API}/doctors/${doctorId}/kit/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dark_store_id: darkStoreId }),
+    });
+    return r.json();
+  },
+  async validateSupply(visitId: string) {
+    const r = await fetch(`${API}/visits/${visitId}/validate-supply`, { method: 'POST' });
+    return r.json();
+  },
+  async endVisit(visitId: string, doctorId: string, dispensed: any[]) {
+    const r = await fetch(`${API}/visits/end`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visit_id: visitId, doctor_id: doctorId, dispensed }),
+    });
+    return r.json();
+  },
+  async logWastage(doctorId: string, payload: any) {
+    const r = await fetch(`${API}/doctors/${doctorId}/wastage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return r.json();
+  },
+  async listWastage(doctorId: string) {
+    const r = await fetch(`${API}/doctors/${doctorId}/wastage`);
+    return r.json();
+  },
+  async doctorFeed(doctorId?: string): Promise<Visit[]> {
+    const url = doctorId ? `${API}/visits/doctor/feed?doctor_id=${doctorId}` : `${API}/visits/doctor/feed`;
+    const r = await fetch(url);
+    return r.json();
+  },
   async getChatMessages(sessionId: string) {
     const r = await fetch(`${API}/symptom-check/${sessionId}/messages`);
     return r.json();
@@ -162,6 +220,12 @@ export const api = {
       body: JSON.stringify(payload),
     });
     return r.json();
+  },
+  async getVisitReview(visitId: string) {
+    const r = await fetch(`${API}/visits/${visitId}/review`);
+    const txt = await r.text();
+    if (!txt || txt === 'null') return null;
+    return JSON.parse(txt);
   },
   async createPrescription(payload: any) {
     const r = await fetch(`${API}/prescriptions`, {

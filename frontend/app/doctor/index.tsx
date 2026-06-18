@@ -39,7 +39,7 @@ export default function DoctorFeed() {
       all.find((d) => d.name.toLowerCase() === u.name.toLowerCase()) ||
       all[0]; // fallback to first doctor for demo
     setDoctor(me);
-    const f = await api.doctorFeed();
+    const f = await api.doctorFeed(me?.id);
     setFeed(f);
     setLoading(false);
   }, []);
@@ -193,6 +193,20 @@ export default function DoctorFeed() {
                   )}
                 </View>
               )}
+              {v.mcq_answers && (
+                <View style={styles.rawPanel} testID={`raw-mcq-${v.id}`}>
+                  <Text style={styles.rawLabel}>PATIENT RAW DATA</Text>
+                  <Text style={styles.rawValue}>
+                    {[
+                      v.mcq_answers.symptom_category,
+                      v.mcq_answers.duration,
+                      v.mcq_answers.severity + ' Severity',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                </View>
+              )}
               <View style={styles.jobMeta}>
                 <Ionicons name="location" size={12} color={COLORS.textSecondary} />
                 <Text style={styles.jobAddr}>{v.address}</Text>
@@ -305,6 +319,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontStyle: 'italic',
   },
+  rawPanel: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.surface,
+  },
+  rawLabel: { fontSize: 10, letterSpacing: 2, fontWeight: '800', color: COLORS.textSecondary },
+  rawValue: { fontSize: 12, color: COLORS.textPrimary, marginTop: 4, fontWeight: '600' },
   jobMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
   jobAddr: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
   acceptBtn: {

@@ -39,6 +39,7 @@ class UserLogin(BaseModel):
     name: str
     role: Literal["patient", "doctor"]
     email: Optional[str] = None
+    gender: Optional[Literal["female", "male", "other"]] = None
 
 
 class User(BaseModel):
@@ -46,6 +47,7 @@ class User(BaseModel):
     name: str
     role: str
     email: Optional[str] = None
+    gender: Optional[str] = None
 
 
 class Doctor(BaseModel):
@@ -60,13 +62,17 @@ class Doctor(BaseModel):
     reviews_count: int
     years_experience: int
     fee: int
-    location: dict  # {lat, lng, area}
+    location: dict
     online: bool = True
+    gender: Optional[str] = None
+    qualifications: List[str] = []
+    trust_badges: List[str] = []
 
 
 class Review(BaseModel):
     id: str
     doctor_id: str
+    visit_id: Optional[str] = None
     patient_name: str
     rating: int
     comment: str
@@ -79,8 +85,10 @@ class VisitCreate(BaseModel):
     address: str
     symptoms: str
     urgency: Literal["routine", "urgent", "asap"] = "urgent"
-    patient_location: dict  # {lat, lng}
+    patient_location: dict
     symptom_report_id: Optional[str] = None
+    patient_gender: Optional[str] = None
+    mcq_answers: Optional[dict] = None
 
 
 class Visit(BaseModel):
@@ -102,6 +110,9 @@ class Visit(BaseModel):
     completed_at: Optional[str] = None
     symptom_report_id: Optional[str] = None
     symptom_summary: Optional[dict] = None
+    patient_gender: Optional[str] = None
+    female_only: bool = False
+    mcq_answers: Optional[dict] = None
 
 
 class StatusUpdate(BaseModel):
@@ -138,6 +149,8 @@ SEED_DOCTORS = [
         "bio": "Compassionate family physician with a focus on pediatric and elderly home care. Known for calming bedside manner and thorough diagnoses.",
         "avatar": "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=srgb&fm=jpg&w=400&q=85",
         "credentials": ["MBBS - AIIMS Delhi", "MD Family Medicine", "Board Certified", "12+ home visits/week"],
+        "qualifications": ["MBBS, AIIMS Delhi (2012)", "MD - Family Medicine, PGI Chandigarh (2016)", "Member, Indian Medical Association", "BLS & ACLS Certified"],
+        "trust_badges": ["Govt ID verified", "Background checked", "Drug-screened", "Insurance covered"],
         "verified": True,
         "rating": 4.9,
         "reviews_count": 247,
@@ -145,6 +158,7 @@ SEED_DOCTORS = [
         "fee": 1499,
         "location": {"lat": 12.9716, "lng": 77.5946, "area": "Indiranagar"},
         "online": True,
+        "gender": "female",
     },
     {
         "id": "doc-2",
@@ -153,6 +167,8 @@ SEED_DOCTORS = [
         "bio": "Internal medicine specialist with expertise in acute care, fevers, and respiratory conditions. Available for late-night urgent calls.",
         "avatar": "https://images.unsplash.com/photo-1612531386530-97286d97c2d2?crop=entropy&cs=srgb&fm=jpg&w=400&q=85",
         "credentials": ["MD Internal Medicine", "Fellowship - Acute Care", "Board Certified"],
+        "qualifications": ["MBBS, KMC Manipal (2014)", "MD - Internal Medicine, CMC Vellore (2018)", "Fellowship in Acute Care Medicine", "ECFMG Certified"],
+        "trust_badges": ["Govt ID verified", "Background checked", "Drug-screened", "Insurance covered"],
         "verified": True,
         "rating": 4.8,
         "reviews_count": 189,
@@ -160,6 +176,7 @@ SEED_DOCTORS = [
         "fee": 1799,
         "location": {"lat": 12.9352, "lng": 77.6245, "area": "Koramangala"},
         "online": True,
+        "gender": "male",
     },
     {
         "id": "doc-3",
@@ -168,6 +185,8 @@ SEED_DOCTORS = [
         "bio": "Pediatrician dedicated to infant and child wellness. Soft-spoken, patient with anxious parents, and skilled at quick diagnoses.",
         "avatar": "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=srgb&fm=jpg&w=400&q=85",
         "credentials": ["MBBS", "MD Pediatrics", "Neonatal Care Certified"],
+        "qualifications": ["MBBS, Grant Medical College, Mumbai (2009)", "MD - Pediatrics, KEM Hospital (2013)", "Neonatal Care Specialist Certification", "Fellow, Indian Academy of Pediatrics"],
+        "trust_badges": ["Govt ID verified", "Background checked", "Drug-screened", "Pediatric-safe protocols"],
         "verified": True,
         "rating": 5.0,
         "reviews_count": 312,
@@ -175,6 +194,7 @@ SEED_DOCTORS = [
         "fee": 1899,
         "location": {"lat": 12.9081, "lng": 77.6476, "area": "HSR Layout"},
         "online": True,
+        "gender": "female",
     },
     {
         "id": "doc-4",
@@ -183,6 +203,8 @@ SEED_DOCTORS = [
         "bio": "Geriatric care specialist for elderly patients. Patient, gentle, and experienced with chronic condition management at home.",
         "avatar": "https://images.unsplash.com/photo-1612531386530-97286d97c2d2?crop=entropy&cs=srgb&fm=jpg&w=400&q=85",
         "credentials": ["MD Geriatrics", "Palliative Care Certified", "Board Certified"],
+        "qualifications": ["MBBS, MAMC Delhi (2006)", "MD - Geriatric Medicine, AIIMS Delhi (2010)", "Palliative Care Certification (UK)", "20+ years home care experience"],
+        "trust_badges": ["Govt ID verified", "Background checked", "Drug-screened", "Elderly-care trained"],
         "verified": True,
         "rating": 4.7,
         "reviews_count": 156,
@@ -190,6 +212,7 @@ SEED_DOCTORS = [
         "fee": 1999,
         "location": {"lat": 12.9784, "lng": 77.6408, "area": "Whitefield"},
         "online": False,
+        "gender": "male",
     },
     {
         "id": "doc-5",
@@ -198,6 +221,8 @@ SEED_DOCTORS = [
         "bio": "GP with rapid response training. Fastest ETA in the network for urgent visits in central area.",
         "avatar": "https://images.unsplash.com/photo-1758691463393-a2aa9900af8a?crop=entropy&cs=srgb&fm=jpg&w=400&q=85",
         "credentials": ["MBBS", "Emergency Care Trained"],
+        "qualifications": ["MBBS, BJ Medical College Pune (2018)", "Diploma in Emergency Medicine", "BLS/ACLS Certified", "Rapid Response Trained"],
+        "trust_badges": ["Govt ID verified", "Background checked", "Drug-screened", "Insurance covered"],
         "verified": True,
         "rating": 4.85,
         "reviews_count": 98,
@@ -205,6 +230,7 @@ SEED_DOCTORS = [
         "fee": 1299,
         "location": {"lat": 12.9698, "lng": 77.7500, "area": "Marathahalli"},
         "online": True,
+        "gender": "female",
     },
 ]
 
@@ -218,14 +244,80 @@ SEED_REVIEWS = [
 ]
 
 
+SEED_DARK_STORES = [
+    {
+        "id": "ds-indiranagar",
+        "name": "Indiranagar Hub",
+        "area": "Indiranagar",
+        "location": {"lat": 12.9716, "lng": 77.5946},
+        "inventory": {
+            "paracetamol_500": 240,
+            "ibuprofen_400": 180,
+            "amoxicillin_500": 90,
+            "ors_sachets": 320,
+            "cetirizine_10": 200,
+            "antiseptic_kit": 60,
+            "thermometer": 25,
+            "bandages": 150,
+        },
+    },
+    {
+        "id": "ds-koramangala",
+        "name": "Koramangala Hub",
+        "area": "Koramangala",
+        "location": {"lat": 12.9352, "lng": 77.6245},
+        "inventory": {
+            "paracetamol_500": 300,
+            "ibuprofen_400": 200,
+            "amoxicillin_500": 110,
+            "ors_sachets": 280,
+            "cetirizine_10": 240,
+            "antiseptic_kit": 75,
+            "thermometer": 30,
+            "bandages": 180,
+        },
+    },
+    {
+        "id": "ds-hsr",
+        "name": "HSR Layout Hub",
+        "area": "HSR Layout",
+        "location": {"lat": 12.9081, "lng": 77.6476},
+        "inventory": {
+            "paracetamol_500": 220,
+            "ibuprofen_400": 160,
+            "amoxicillin_500": 80,
+            "ors_sachets": 250,
+            "cetirizine_10": 190,
+            "antiseptic_kit": 55,
+            "thermometer": 20,
+            "bandages": 140,
+        },
+    },
+]
+
+MED_CATALOG = {
+    "paracetamol_500": {"name": "Paracetamol 500mg", "default_qty": 10},
+    "ibuprofen_400": {"name": "Ibuprofen 400mg", "default_qty": 10},
+    "amoxicillin_500": {"name": "Amoxicillin 500mg", "default_qty": 15},
+    "ors_sachets": {"name": "ORS Sachets", "default_qty": 6},
+    "cetirizine_10": {"name": "Cetirizine 10mg", "default_qty": 10},
+    "antiseptic_kit": {"name": "Antiseptic Kit", "default_qty": 1},
+    "thermometer": {"name": "Digital Thermometer", "default_qty": 1},
+    "bandages": {"name": "Bandage Roll", "default_qty": 3},
+}
+
+
 @app.on_event("startup")
 async def seed_data():
-    if await db.doctors.count_documents({}) == 0:
-        await db.doctors.insert_many([d.copy() for d in SEED_DOCTORS])
-        logging.info("Seeded doctors")
+    # Force re-seed to pick up new schema fields (idempotent at app boot)
+    await db.doctors.delete_many({})
+    await db.doctors.insert_many([d.copy() for d in SEED_DOCTORS])
     if await db.reviews.count_documents({}) == 0:
         await db.reviews.insert_many([r.copy() for r in SEED_REVIEWS])
-        logging.info("Seeded reviews")
+    # seed dark stores + doctor kits
+    if await db.dark_stores.count_documents({}) == 0:
+        await db.dark_stores.insert_many([s.copy() for s in SEED_DARK_STORES])
+    logging.info("Seeded doctors / reviews / dark stores")
 
 
 # ===== Routes =====
@@ -238,15 +330,31 @@ async def root():
 async def login(payload: UserLogin):
     existing = await db.users.find_one({"name": payload.name, "role": payload.role}, {"_id": 0})
     if existing:
+        # update gender if newly provided
+        if payload.gender and existing.get("gender") != payload.gender:
+            await db.users.update_one(
+                {"id": existing["id"]}, {"$set": {"gender": payload.gender}}
+            )
+            existing["gender"] = payload.gender
         return User(**existing)
-    user = User(id=str(uuid.uuid4()), name=payload.name, role=payload.role, email=payload.email)
+    user = User(
+        id=str(uuid.uuid4()),
+        name=payload.name,
+        role=payload.role,
+        email=payload.email,
+        gender=payload.gender,
+    )
     await db.users.insert_one(user.dict())
     return user
 
 
 @api_router.get("/doctors", response_model=List[Doctor])
-async def list_doctors(online_only: bool = False):
-    query = {"online": True} if online_only else {}
+async def list_doctors(online_only: bool = False, gender: Optional[str] = None):
+    query: dict = {}
+    if online_only:
+        query["online"] = True
+    if gender:
+        query["gender"] = gender
     docs = await db.doctors.find(query, {"_id": 0}).to_list(100)
     return [Doctor(**d) for d in docs]
 
@@ -308,20 +416,36 @@ async def create_visit(payload: VisitCreate):
         created_at=now_iso(),
         symptom_report_id=payload.symptom_report_id,
         symptom_summary=summary,
+        patient_gender=payload.patient_gender,
+        female_only=(payload.patient_gender == "female"),
+        mcq_answers=payload.mcq_answers,
     )
     await db.visits.insert_one(visit.dict())
     return visit
 
 
-@api_router.get("/visits/patient/{patient_id}", response_model=List[Visit])
-async def patient_visits(patient_id: str):
-    visits = await db.visits.find({"patient_id": patient_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+@api_router.get("/visits/doctor/feed", response_model=List[Visit])
+async def doctor_feed(doctor_id: Optional[str] = None):
+    # SEQUENTIAL ROUTING LOCK: if doctor has an active trip, feed is empty
+    if doctor_id:
+        active_count = await db.visits.count_documents({
+            "doctor_id": doctor_id,
+            "status": {"$in": ["accepted", "en_route", "arrived"]},
+        })
+        if active_count > 0:
+            return []
+    query: dict = {"status": "pending"}
+    if doctor_id:
+        doc = await db.doctors.find_one({"id": doctor_id}, {"_id": 0})
+        if doc and doc.get("gender") != "female":
+            query["female_only"] = {"$ne": True}
+    visits = await db.visits.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     return [Visit(**v) for v in visits]
 
 
-@api_router.get("/visits/doctor/feed", response_model=List[Visit])
-async def doctor_feed():
-    visits = await db.visits.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
+@api_router.get("/visits/patient/{patient_id}", response_model=List[Visit])
+async def patient_visits(patient_id: str):
+    visits = await db.visits.find({"patient_id": patient_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return [Visit(**v) for v in visits]
 
 
@@ -552,6 +676,73 @@ async def get_report(session_id: str):
     return SymptomReport(**r) if r else None
 
 
+# ===== MCQ Triage Wizard Report =====
+class MCQAnswers(BaseModel):
+    symptom_category: str
+    duration: str
+    severity: str
+    patient_name: Optional[str] = "Patient"
+
+
+SUGGESTED_MEDS_BY_CATEGORY = {
+    "Fever/Chills": [
+        {"name": "Paracetamol 500mg", "reason": "Reduces fever and body ache", "item_id": "paracetamol_500"},
+        {"name": "ORS Sachets", "reason": "Maintain hydration", "item_id": "ors_sachets"},
+    ],
+    "Cough/Respiratory": [
+        {"name": "Cetirizine 10mg", "reason": "Helps with allergic cough and congestion", "item_id": "cetirizine_10"},
+        {"name": "Warm fluids", "reason": "Soothes the throat", "item_id": None},
+    ],
+    "Body Aches/Pain": [
+        {"name": "Ibuprofen 400mg", "reason": "Anti-inflammatory pain relief", "item_id": "ibuprofen_400"},
+        {"name": "Paracetamol 500mg", "reason": "Mild analgesic alternative", "item_id": "paracetamol_500"},
+    ],
+    "Gastrointestinal": [
+        {"name": "ORS Sachets", "reason": "Rehydration is the priority", "item_id": "ors_sachets"},
+        {"name": "Light diet (BRAT)", "reason": "Reduce gut irritation", "item_id": None},
+    ],
+    "Other": [
+        {"name": "Doctor consultation", "reason": "Symptom unclear - in-person evaluation recommended", "item_id": None},
+    ],
+}
+
+
+@api_router.post("/symptom-check/{session_id}/report-mcq", response_model=SymptomReport)
+async def generate_mcq_report(session_id: str, payload: MCQAnswers):
+    urgency = "asap" if payload.severity == "Severe" else ("urgent" if payload.severity == "Moderate" else "routine")
+    triage = "emergency" if (payload.severity == "Severe" and payload.duration == "Less than 24 hours") else "home_visit"
+    suggested = SUGGESTED_MEDS_BY_CATEGORY.get(payload.symptom_category, SUGGESTED_MEDS_BY_CATEGORY["Other"])
+    summary = (
+        f"{payload.patient_name} reports {payload.symptom_category.lower()} of {payload.severity.lower()} severity "
+        f"for {payload.duration.lower()}. Home visit recommended for clinical assessment."
+    )
+    report = SymptomReport(
+        id=str(uuid.uuid4()),
+        session_id=session_id,
+        chief_complaint=payload.symptom_category,
+        duration=payload.duration,
+        severity=payload.severity.lower(),
+        key_symptoms=[payload.symptom_category],
+        red_flags=[],
+        patient_summary=summary,
+        suggested_initial_medications=suggested,
+        triage_recommendation=triage,
+        urgency=urgency,
+        created_at=now_iso(),
+    )
+    # also store the raw MCQ for downstream display
+    doc = report.dict()
+    doc["mcq_answers"] = {
+        "symptom_category": payload.symptom_category,
+        "duration": payload.duration,
+        "severity": payload.severity,
+    }
+    await db.symptom_reports.update_one(
+        {"session_id": session_id}, {"$set": doc}, upsert=True
+    )
+    return report
+
+
 
 @api_router.get("/symptom-check/{session_id}/messages", response_model=List[ChatMessage])
 async def get_chat_messages(session_id: str):
@@ -738,26 +929,37 @@ class ReviewCreate(BaseModel):
     patient_name: str
     rating: int
     comment: str
+    visit_id: Optional[str] = None
 
 
 @api_router.post("/reviews", response_model=Review)
 async def create_review(payload: ReviewCreate):
+    if payload.visit_id:
+        existing = await db.reviews.find_one({"visit_id": payload.visit_id}, {"_id": 0})
+        if existing:
+            return Review(**existing)
     review = Review(
         id=str(uuid.uuid4()),
         doctor_id=payload.doctor_id,
+        visit_id=payload.visit_id,
         patient_name=payload.patient_name,
         rating=payload.rating,
         comment=payload.comment,
         created_at=now_iso(),
     )
     await db.reviews.insert_one(review.dict())
-    # update doctor rating snapshot
     revs = await db.reviews.find({"doctor_id": payload.doctor_id}, {"_id": 0}).to_list(1000)
     avg = round(sum(r["rating"] for r in revs) / len(revs), 2)
     await db.doctors.update_one(
         {"id": payload.doctor_id}, {"$set": {"rating": avg, "reviews_count": len(revs)}}
     )
     return review
+
+
+@api_router.get("/visits/{visit_id}/review", response_model=Optional[Review])
+async def get_visit_review(visit_id: str):
+    r = await db.reviews.find_one({"visit_id": visit_id}, {"_id": 0})
+    return Review(**r) if r else None
 
 
 # ===== Payments (Stripe Checkout) =====
@@ -952,6 +1154,194 @@ async def get_bank(doctor_id: str):
 
 
 app.include_router(api_router)
+
+
+# ===== Decentralized Inventory =====
+class QrCheckout(BaseModel):
+    dark_store_id: str
+    kit_code: str = "STANDARD_KIT_A"
+
+
+@api_router.get("/dark-stores")
+async def list_dark_stores():
+    items = await db.dark_stores.find({}, {"_id": 0}).to_list(50)
+    return items
+
+
+@api_router.get("/doctors/{doctor_id}/kit")
+async def get_kit(doctor_id: str):
+    kit = await db.doctor_kits.find_one({"doctor_id": doctor_id}, {"_id": 0})
+    return kit
+
+
+@api_router.post("/doctors/{doctor_id}/kit/checkout")
+async def kit_checkout(doctor_id: str, payload: QrCheckout):
+    doc = await db.doctors.find_one({"id": doctor_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Doctor not found")
+    store = await db.dark_stores.find_one({"id": payload.dark_store_id}, {"_id": 0})
+    if not store:
+        raise HTTPException(404, "Dark Store not found")
+
+    standard_kit = {k: v["default_qty"] for k, v in MED_CATALOG.items()}
+    # decrement store inventory atomically (simulated)
+    for item_id, qty in standard_kit.items():
+        current = store["inventory"].get(item_id, 0)
+        if current < qty:
+            raise HTTPException(400, f"Insufficient stock at {store['name']} for {item_id}")
+    for item_id, qty in standard_kit.items():
+        await db.dark_stores.update_one(
+            {"id": store["id"]}, {"$inc": {f"inventory.{item_id}": -qty}}
+        )
+
+    kit_doc = {
+        "doctor_id": doctor_id,
+        "dark_store_id": store["id"],
+        "dark_store_name": store["name"],
+        "kit_code": payload.kit_code,
+        "items": standard_kit,
+        "checked_out_at": now_iso(),
+    }
+    await db.doctor_kits.update_one(
+        {"doctor_id": doctor_id}, {"$set": kit_doc}, upsert=True
+    )
+    return kit_doc
+
+
+@api_router.post("/visits/{visit_id}/validate-supply")
+async def validate_supply(visit_id: str):
+    visit = await db.visits.find_one({"id": visit_id}, {"_id": 0})
+    if not visit:
+        raise HTTPException(404, "Visit not found")
+    if not visit.get("doctor_id"):
+        raise HTTPException(400, "Visit not assigned")
+    kit = await db.doctor_kits.find_one({"doctor_id": visit["doctor_id"]}, {"_id": 0})
+    if not kit:
+        return {"ok": False, "reason": "No active kit. Scan a Dark Store QR first.", "missing": []}
+    needed = []
+    summary = visit.get("symptom_summary") or {}
+    for m in summary.get("suggested_initial_medications", []) or []:
+        iid = m.get("item_id")
+        if iid and iid in MED_CATALOG:
+            needed.append(iid)
+    missing = [n for n in needed if (kit.get("items") or {}).get(n, 0) <= 0]
+    return {"ok": len(missing) == 0, "needed": needed, "missing": missing, "kit_code": kit.get("kit_code")}
+
+
+class DispenseItem(BaseModel):
+    item_id: str
+    qty: int = 1
+
+
+class EndVisitPayload(BaseModel):
+    visit_id: str
+    doctor_id: str
+    dispensed: List[DispenseItem]
+
+
+@api_router.post("/visits/end")
+async def end_visit_and_reconcile(payload: EndVisitPayload):
+    visit = await db.visits.find_one({"id": payload.visit_id}, {"_id": 0})
+    if not visit:
+        raise HTTPException(404, "Visit not found")
+    kit = await db.doctor_kits.find_one({"doctor_id": payload.doctor_id}, {"_id": 0})
+    if not kit:
+        raise HTTPException(400, "No active kit found")
+
+    # 1) Deduct from doctor kit
+    deducted = []
+    for d in payload.dispensed:
+        if d.item_id not in MED_CATALOG:
+            continue
+        current = (kit.get("items") or {}).get(d.item_id, 0)
+        if current < d.qty:
+            raise HTTPException(400, f"Insufficient {d.item_id} in doctor kit ({current} < {d.qty})")
+        deducted.append({
+            "item_id": d.item_id,
+            "name": MED_CATALOG[d.item_id]["name"],
+            "qty": d.qty,
+        })
+    for d in deducted:
+        await db.doctor_kits.update_one(
+            {"doctor_id": payload.doctor_id},
+            {"$inc": {f"items.{d['item_id']}": -d["qty"]}},
+        )
+    # 2) Log depletion at dark store master count (re-use the store the kit came from)
+    if kit.get("dark_store_id"):
+        for d in deducted:
+            await db.inventory_transactions.insert_one({
+                "id": str(uuid.uuid4()),
+                "dark_store_id": kit["dark_store_id"],
+                "doctor_id": payload.doctor_id,
+                "visit_id": payload.visit_id,
+                "item_id": d["item_id"],
+                "qty": d["qty"],
+                "type": "dispensed_to_patient",
+                "at": now_iso(),
+            })
+    # 3) Issue itemized receipt — store on visit & invoice
+    receipt = {
+        "dispensed": deducted,
+        "kit_code": kit.get("kit_code"),
+        "dark_store": kit.get("dark_store_name"),
+        "issued_at": now_iso(),
+    }
+    await db.visits.update_one(
+        {"id": payload.visit_id},
+        {"$set": {"status": "completed", "completed_at": now_iso(), "dispensed_receipt": receipt}},
+    )
+    visit["status"] = "completed"
+    visit["completed_at"] = now_iso()
+    visit["dispensed_receipt"] = receipt
+    await ensure_invoice(visit)
+    await db.invoices.update_one(
+        {"visit_id": payload.visit_id}, {"$set": {"dispensed": deducted}}
+    )
+    return {"ok": True, "receipt": receipt}
+
+
+class WastageEntry(BaseModel):
+    item_id: str
+    qty: int
+    reason: str
+
+
+@api_router.post("/doctors/{doctor_id}/wastage")
+async def log_wastage(doctor_id: str, payload: WastageEntry):
+    if payload.item_id not in MED_CATALOG:
+        raise HTTPException(400, "Unknown item")
+    kit = await db.doctor_kits.find_one({"doctor_id": doctor_id}, {"_id": 0})
+    if kit:
+        current = (kit.get("items") or {}).get(payload.item_id, 0)
+        deduct = min(current, payload.qty)
+        if deduct > 0:
+            await db.doctor_kits.update_one(
+                {"doctor_id": doctor_id},
+                {"$inc": {f"items.{payload.item_id}": -deduct}},
+            )
+    entry = {
+        "id": str(uuid.uuid4()),
+        "doctor_id": doctor_id,
+        "item_id": payload.item_id,
+        "item_name": MED_CATALOG[payload.item_id]["name"],
+        "qty": payload.qty,
+        "reason": payload.reason,
+        "at": now_iso(),
+    }
+    await db.wastage_log.insert_one(entry)
+    entry.pop("_id", None)
+    return entry
+
+
+@api_router.get("/doctors/{doctor_id}/wastage")
+async def list_wastage(doctor_id: str):
+    items = await db.wastage_log.find({"doctor_id": doctor_id}, {"_id": 0}).sort("at", -1).to_list(100)
+    return items
+
+
+# Re-include router so the newly added inventory routes are registered
+app.include_router(api_router)
+
 
 app.add_middleware(
     CORSMiddleware,
