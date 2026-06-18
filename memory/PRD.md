@@ -1,38 +1,36 @@
 # NURTIX - Product Requirements Document
 
 ## Overview
-NURTIX is a quick-commerce style healthcare mobile app (Expo React Native) for immediate, affordable home doctor visits for infants, elderly, and busy professionals.
+NURTIX is a quick-commerce style healthcare mobile app (Expo React Native) for immediate, affordable home doctor visits.
 
-## Iteration 1 (MVP)
-- Role selector, mock auth, patient dashboard, AI Symptom Checker, live ETA mock map, doctor portal, trust profile
-
-## Iteration 2
-- Doctor Earnings dashboard (balance, 15% platform fee), Withdrawal flow, E-Prescriptions, E-Invoices (auto on completion, 5% + 18% GST)
-
-## Iteration 3 (Stripe)
-- Real Stripe Checkout (test mode) for patient invoice payments (server-decided amount, webhook, idempotent status)
-- Stripe Connect bank linking for doctors (payout MOCKED pending real platform onboarding)
-
-## Iteration 4 (AI-First E2E Flow per user spec)
-Patient: login → symptom checker chat → after ≥3 user turns, "Generate AI report" CTA appears → Claude Sonnet 4.5 generates structured JSON report (chief complaint, severity, key symptoms, red flags, suggested OTC meds, triage recommendation, urgency) → patient reviews in a clean Rx-style summary screen → "Send report & book doctor" creates visit with the symptom_summary snapshot attached → live ETA tracking.
-
-Doctor side: every pending/active visit card shows an **AI TRIAGE REPORT** panel with patient_summary, key symptom chips, and AI-suggested OTC medications — **before** accepting, so the doctor already knows the context and can bring basic medications.
-
-PDF export: `expo-print` + `expo-sharing` with branded HTML templates for **Prescriptions** and **Invoices** — "Download / Share PDF" button on both screens; web fallback opens browser print dialog.
+## Iterations
+- **Iter 1 (MVP)** – role selector, mock auth, AI symptom checker (chat), mock-map ETA tracking, doctor portal with feed/accept, trust profile.
+- **Iter 2** – Earnings dashboard, withdrawals, e-prescriptions, e-invoices (auto on completion).
+- **Iter 3** – Real Stripe Checkout for invoice payments; Stripe Connect bank linking (payout MOCKED).
+- **Iter 4** – AI-first end-to-end flow (Claude-generated structured report attached to visit; raw + suggested OTC shown to doctor); PDF export/share for Rx + Invoice.
+- **Iter 5 (Operational Blueprint)** – major upgrade per the user's blueprint:
+  - Patient symptom checker replaced with **deterministic 3-question MCQ wizard** (Category / Duration / Severity) → "Generating your AI Report..." → existing report screen with "Send report & book doctor".
+  - Doctor feed + active cards show **AI TRIAGE REPORT panel** AND **PATIENT RAW DATA panel** with the exact MCQ selections.
+  - **Sequential routing lock**: `/api/visits/doctor/feed?doctor_id=X` returns [] while doctor has any active visit; unlocks on completion.
+  - **Decentralized Inventory**: 3 seeded Dark Stores (Indiranagar / Koramangala / HSR), each with full inventory dict. New Doctor "Kit" tab with mock **QR Scan Check-Out** (decrements store, binds kit to doctor), kit grid view, **Wastage Ledger** portal.
+  - **Pre-trip Supply Validation** runs when doctor presses "Start trip"; warns if kit lacks recommended items.
+  - **Tri-party reconciliation on End Visit**: a dispense modal lets the doctor pick items + quantities; submission deducts from kit, logs `inventory_transactions` against the source Dark Store, sets visit.status=completed with `dispensed_receipt`, and attaches the dispensed list to the invoice.
 
 ## Stack
-- Backend: FastAPI + MongoDB + emergentintegrations (Claude Sonnet 4.5 + Stripe Checkout)
-- Frontend: Expo Router + AsyncStorage + expo-web-browser (Stripe) + expo-print / expo-sharing (PDF)
+- Backend: FastAPI + MongoDB + emergentintegrations (Claude Sonnet 4.5, Stripe Checkout)
+- Frontend: Expo Router, AsyncStorage, expo-web-browser (Stripe), expo-print + expo-sharing (PDF)
+- Theme retained: Deep Forest Green + Electric Coral + cream
 
-## Key New Endpoints (Iter 4)
-- POST /api/symptom-check (now returns `user_turns`, `ready_for_report`)
-- POST /api/symptom-check/{session_id}/report — generates structured JSON report (Claude)
-- GET /api/symptom-check/{session_id}/report
-- POST /api/visits now accepts `symptom_report_id` and copies `symptom_summary` snapshot + adopts urgency
+## Key New Endpoints (Iter 5)
+- `POST /api/symptom-check/{sid}/report-mcq` – deterministic MCQ → structured report
+- `GET /api/dark-stores`
+- `POST /api/doctors/{id}/kit/checkout`, `GET /api/doctors/{id}/kit`
+- `POST /api/visits/{id}/validate-supply`
+- `POST /api/visits/end` – tri-party reconciliation
+- `POST/GET /api/doctors/{id}/wastage`
+- `GET /api/visits/doctor/feed?doctor_id=` now returns [] when doctor has an active trip (sequential lock)
 
 ## Mocked / Deferred
-- Google Maps SDK (mock tile image)
-- Real Stripe Connect Express payouts (bank saved, payout mocked)
-- Push notifications, real-time location WebSocket
-- Patient review submission UI
-- Google OAuth / full credential verification admin flow
+- **Stripe Connect payout to bank** – withdrawals stay `pending`.
+- QR scan – modal hub picker simulates the locker scan.
+- Google Maps SDK – mock tile image.

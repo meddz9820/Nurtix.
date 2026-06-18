@@ -38,8 +38,8 @@ const STEPS: Step[] = [
     question: 'How long have you been experiencing these symptoms?',
     options: [
       'Less than 24 hours',
-      '1–3 days',
-      '4–7 days',
+      '1-3 days',
+      '4-7 days',
       'More than a week',
     ],
   },
