@@ -14,18 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, storage, COLORS, Doctor } from '../../src/lib/api';
-
-const ITEM_LABELS: Record<string, string> = {
-  paracetamol_500: 'Paracetamol 500mg',
-  ibuprofen_400: 'Ibuprofen 400mg',
-  amoxicillin_500: 'Amoxicillin 500mg',
-  ors_sachets: 'ORS Sachets',
-  cetirizine_10: 'Cetirizine 10mg',
-  antiseptic_kit: 'Antiseptic Kit',
-  thermometer: 'Digital Thermometer',
-  bandages: 'Bandage Roll',
-};
+import { api, storage, COLORS, Doctor, ITEM_LABELS } from '../../src/lib/api';
 
 export default function InventoryScreen() {
   const [doctor, setDoctor] = useState<Doctor | null>(null);

@@ -34,3 +34,5 @@ NURTIX is a quick-commerce style healthcare mobile app (Expo React Native) for i
 - **Stripe Connect payout to bank** – withdrawals stay `pending`.
 - QR scan – modal hub picker simulates the locker scan.
 - Google Maps SDK – mock tile image.
+
+- Fork 1: Fixed doctor Active page crash (ITEM_LABELS now shared from src/lib/api.ts); larger +/- buttons in end-visit modal.

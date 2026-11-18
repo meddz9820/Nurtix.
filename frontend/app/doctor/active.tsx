@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, storage, COLORS, Doctor, Visit } from '../../src/lib/api';
+import { api, storage, COLORS, Doctor, Visit, ITEM_LABELS } from '../../src/lib/api';
 
 const NEXT_STATUS: Record<string, string> = {
   accepted: 'en_route',
@@ -446,9 +446,9 @@ const styles = StyleSheet.create({
   dispName: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
   dispStock: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   qtyBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',

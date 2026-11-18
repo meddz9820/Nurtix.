@@ -1,0 +1,29 @@
+{
+  "summary": "Re-verified the ITEM_LABELS crash fix on the doctor pages (frontend only, 390x844 mobile viewport, logged in as Dr. Aisha Patel). /doctor/active loads with no red screen and no pageerror. Ran the full active flow on an existing accepted visit (TEST_P_116579): Start trip -> I have arrived -> Mark completed. The dispense modal listed all 8 kit items by label (Paracetamol 500mg, Ibuprofen 400mg, Amoxicillin 500mg, ORS Sachets, Cetirizine 10mg, Antiseptic Kit, Digital Thermometer, Bandage Roll). Picked 1 Paracetamol and tapped End Visit: the alert 'Visit closed. Tri-party reconciliation complete.' appeared, the page showed 'No active jobs' and the kit went from Paracetamol x10 to x9. /doctor/inventory shows the kit item names. The mock QR Restock (store-*) checked out a kit from Indiranagar Hub and refreshed it. The wastage modal shows the item labels. Doctor feed loads (0 cards while a visit was active, which is the expected sequential lock, then 9 pending cards after it closed). Only one doctorFeed method is left in api.ts. tsc shows no errors in active.tsx, inventory.tsx or api.ts. Fix verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "doctor/active.tsx dispense modal", "issues": ["The qty +/- buttons (styles.qtyBtn) are 30x30, below the 44x44 minimum touch target. They also have no testIDs."]},
+      {"screen": "doctor/inventory.tsx wastage modal", "issues": ["The 'Log' button text sits at the top of the button instead of being vertically centred. It also looks taller than the Cancel button."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: make the dispense qty buttons at least 44x44 and add testIDs (e.g. dispense-plus-{id} / dispense-minus-{id}).",
+    "Optional: vertically centre the text in the wastage modal 'Log' button (confirm-wastage) and match its height to Cancel."
+  ],
+  "critical_code_review_comments": [
+    "ITEM_LABELS is now exported from src/lib/api.ts and imported in active.tsx and inventory.tsx. Both files fall back to the raw id with ITEM_LABELS[id] || id.",
+    "api.ts reads process.env.EXPO_PUBLIC_BACKEND_URL. That is correct for Expo, and the frontend .env defines it."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100%"},
+  "seed_data_creation": "None created. Data changed during testing: completed the pre-existing TEST_P_116579 visit (8123da88...) with 1 Paracetamol dispensed. Re-checked out doc-1's kit from the first store (Indiranagar Hub), which consumes that dark store's stock (seeded app data).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Doctor doc-1 (Dr. Aisha Patel) has no active visit now, so the feed shows pending requests. The kit is bound to Indiranagar Hub. The mock QR button (qr-scan-button) only appears when there is no kit; otherwise use rescan-button.",
+  "rca_of_issue": "ITEM_LABELS was declared only in inventory.tsx but used in active.tsx for the dispense modal, which caused a ReferenceError. Moving it to the shared api.ts module and importing it in both files fixed the crash; verified via UI."
+}

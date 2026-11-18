@@ -45,6 +45,8 @@ export interface Visit {
   created_at: string;
   accepted_at?: string;
   completed_at?: string;
+  symptom_summary?: any;
+  mcq_answers?: any;
 }
 
 export interface Review {
@@ -104,13 +106,6 @@ export const api = {
   async patientVisits(patientId: string): Promise<Visit[]> {
     const r = await fetch(`${API}/visits/patient/${patientId}`);
     return r.json();
-  },
-  async doctorFeed(): Promise<Visit[]> {
-    const r = await fetch(`${API}/visits/doctor/feed`);
-    return r.json();
-  },
-  async _doctorFeedLegacyREMOVED() {
-    return [];
   },
   async doctorActive(doctorId: string): Promise<Visit[]> {
     const r = await fetch(`${API}/visits/doctor/${doctorId}/active`);
@@ -290,6 +285,18 @@ export const api = {
     return JSON.parse(txt);
   },
 };
+
+export const ITEM_LABELS: Record<string, string> = {
+  paracetamol_500: 'Paracetamol 500mg',
+  ibuprofen_400: 'Ibuprofen 400mg',
+  amoxicillin_500: 'Amoxicillin 500mg',
+  ors_sachets: 'ORS Sachets',
+  cetirizine_10: 'Cetirizine 10mg',
+  antiseptic_kit: 'Antiseptic Kit',
+  thermometer: 'Digital Thermometer',
+  bandages: 'Bandage Roll',
+};
+
 
 export const COLORS = {
   bg: '#F8F7F4',
